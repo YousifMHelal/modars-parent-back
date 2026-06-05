@@ -6,7 +6,7 @@ export default defineConfig({
     environment: "node",
     include: ["tests/**/*.test.ts"],
     setupFiles: ["tests/setup.ts"],
-    globalSetup: ["tests/teardown.ts"],
+    globalSetup: ["tests/integration/db-setup.ts", "tests/teardown.ts"],
     pool: "forks",
     poolOptions: {
       forks: {

@@ -19,12 +19,46 @@ npm install
 cp .env.example .env
 # Edit .env: set DATABASE_URL, REDIS_URL (and optionally PORT, CORS_ORIGINS, etc.)
 
-# 3. Generate Prisma client
-npx prisma generate
+# 3. Apply migrations + seed the database
+npm run db:migrate          # apply schema migrations
+npm run db:seed             # load the Sarah Ahmed mock-parity fixture
 
 # 4. Start with hot reload
 npm run dev
 ```
+
+## Database scripts (Phase 1)
+
+| Script | Description |
+|--------|-------------|
+| `npm run db:migrate` | Apply pending Prisma migrations to the database (`prisma migrate dev`) |
+| `npm run db:seed` | Load the mock-parity fixture (Sarah Ahmed family) via `prisma db seed` |
+| `npm run db:reset` | Drop all tables, re-apply migrations, re-seed (`prisma migrate reset --force`) |
+| `npm run db:studio` | Open Prisma Studio to browse/edit rows visually |
+
+### From scratch (CI / clean slate)
+
+```bash
+npm run db:reset    # drop → migrate → seed in one command
+```
+
+### Verify seed parity
+
+```bash
+# Automated parity assertions
+npm test -- seed-parity
+
+# Visual inspection
+npm run db:studio
+```
+
+After seeding you should see:
+- `Parent` Sarah Ahmed (OWNER) in one `Family` with two `Child` rows
+- `Child` Ahmed: `minutesThisWeek=240`, `streak=12`, `topSubject=Mathematics`
+- `Child` Layla: `minutesThisWeek=180`, `streak=8`, `topSubject=English`
+- `Subscription` FAMILY / ACTIVE / YEARLY, renews 2027-06-15; two PAID invoices of 149900 SAR-minor
+- Each child has 9 `ReminderConfig` rows and 8 `Badge` rows
+- 5 `Notification` rows with `readAt = null`
 
 ## Build
 
