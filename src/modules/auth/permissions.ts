@@ -16,6 +16,8 @@ export type Action =
   | "co_parent.manage"
   | "account.settings"
   | "family.delete"
+  | "rewards.view"
+  | "rewards.manage"
   | "child.session";
 
 const MATRIX: Record<Action, Set<PrincipalRole>> = {
@@ -31,6 +33,8 @@ const MATRIX: Record<Action, Set<PrincipalRole>> = {
   "co_parent.manage": new Set(["owner"]),
   "account.settings": new Set(["owner"]),
   "family.delete": new Set(["owner"]),
+  "rewards.view": new Set(["owner", "co_parent"]),
+  "rewards.manage": new Set(["owner", "co_parent"]),
   "child.session": new Set(["child"]),
 };
 

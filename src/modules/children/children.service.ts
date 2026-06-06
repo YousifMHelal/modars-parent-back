@@ -13,6 +13,7 @@ import { normalizeUsername, suggestUsername, alternatives, isValidUsername } fro
 import { updateChildCredentials, revokeAllForChild } from "../auth/auth.service.js";
 import { renderLoginCard } from "../../lib/loginCard.js";
 import storage from "../../lib/storage.js";
+import { loginCardKey, loginCardRef } from "../../lib/storageKeys.js";
 import type { CreateChildInput, EditChildInput, CredentialsInput } from "./children.schema.js";
 
 const logger = pino({ name: "children.service" });
@@ -63,8 +64,15 @@ async function backfillLoginCard(child: Child): Promise<void> {
       username: child.username,
       credentialKind: child.pinHash ? "pin" : "password",
     });
-    const url = await storage.put(`login-cards/${child.id}.png`, bytes, contentType);
-    await prisma.child.update({ where: { id: child.id }, data: { loginCardUrl: url } });
+    // Phase 7: write under the family-namespaced PRIVATE key (the put signature is
+    // unchanged — only the key value), and persist a stable app `/files/...` reference
+    // rather than a raw public bucket URL (research §7, SC-007). A storage failure still
+    // leaves loginCardUrl null (best-effort, FR-011).
+    await storage.put(loginCardKey(child.familyId, child.id), bytes, contentType);
+    await prisma.child.update({
+      where: { id: child.id },
+      data: { loginCardUrl: loginCardRef(child.id) },
+    });
   } catch (err) {
     // Non-blocking: the child create already succeeded; leave loginCardUrl null.
     logger.warn({ err, childId: child.id }, "login-card generation failed (non-fatal)");

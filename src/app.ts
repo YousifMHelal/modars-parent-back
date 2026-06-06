@@ -16,6 +16,8 @@ import settingsRouter from "./modules/settings/settings.routes.js";
 import webhooksRouter from "./modules/webhooks/webhooks.routes.js";
 import billingRouter from "./modules/billing/billing.routes.js";
 import notificationsRouter from "./modules/notifications/notifications.routes.js";
+import rewardsRouter from "./modules/rewards/rewards.routes.js";
+import filesRouter from "./modules/files/files.routes.js";
 
 export function createApp(): Application {
   const app = express();
@@ -59,6 +61,11 @@ export function createApp(): Application {
   app.use(settingsRouter);
   app.use(billingRouter);
   app.use(notificationsRouter);
+  app.use(rewardsRouter);
+  // Authorized object retrieval. NOTE: there is intentionally no public
+  // express.static('/storage') mount — stored objects are reachable ONLY through this
+  // family-scoped /files route (Principle V, SC-005/006).
+  app.use(filesRouter);
 
   // 404 + centralized error handler (must be last)
   app.use(notFound);

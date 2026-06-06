@@ -109,6 +109,11 @@ enum RewardStatus {
   EXPIRED
 }
 
+enum RewardGoalMetric {
+  XP
+  SESSIONS
+}
+
 enum MessageType {
   TEXT
   VOICE
@@ -610,6 +615,7 @@ model Reward {
   childId     String?
   title       String
   description String?
+  goalMetric  RewardGoalMetric?
   goalTarget  Int?
   goalCurrent Int?
   status      RewardStatus

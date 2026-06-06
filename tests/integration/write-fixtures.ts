@@ -283,6 +283,10 @@ export async function teardownWriteFixture(): Promise<void> {
   await prisma.paymentMethod.deleteMany({ where: { familyId: { in: familyIds } } });
   await prisma.invoice.deleteMany({ where: { subscription: { familyId: { in: familyIds } } } });
   await prisma.subscription.deleteMany({ where: { familyId: { in: familyIds } } });
+  // Phase 7: rewards + sessions reference family/child with onDelete: Restrict — clear
+  // before children. (Tests that seed Session rows for SESSIONS-goal derivation.)
+  await prisma.reward.deleteMany({ where: { familyId: { in: familyIds } } });
+  await prisma.session.deleteMany({ where: { familyId: { in: familyIds } } });
   await prisma.authSession.updateMany({
     where: { familyId: { in: familyIds } },
     data: { replacedById: null },

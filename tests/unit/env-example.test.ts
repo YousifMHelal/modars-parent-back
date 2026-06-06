@@ -15,6 +15,16 @@ const REQUIRED_KEYS = [
   "RATE_LIMIT_WINDOW_MS",
   "RATE_LIMIT_MAX",
   "LOG_LEVEL",
+  // Phase 7 — object storage backend selection + R2/S3 block
+  "STORAGE_BACKEND",
+  "STORAGE_DIR",
+  "STORAGE_PUBLIC_URL",
+  "STORAGE_S3_ENDPOINT",
+  "STORAGE_S3_REGION",
+  "STORAGE_S3_BUCKET",
+  "STORAGE_S3_ACCESS_KEY_ID",
+  "STORAGE_S3_SECRET_ACCESS_KEY",
+  "STORAGE_S3_SIGNED_URL_TTL",
 ];
 
 describe(".env.example completeness", () => {

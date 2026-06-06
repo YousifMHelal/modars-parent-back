@@ -5,6 +5,7 @@ import { sessionEventSchema, type SessionEvent } from "./sessionEvents.schema.js
 import { applyHomeworkEvent, type HomeworkEventKind } from "../homework/homework.service.js";
 import { deriveFromSession } from "../progress/progress.service.js";
 import { buildAndDispatch, type NotificationIntent } from "../notifications/notifications.service.js";
+import { goalMetIntentsForChild } from "../rewards/rewards.service.js";
 
 const logger = pino({ name: "sessionEvents.service" });
 
@@ -69,10 +70,14 @@ export async function processSessionEvent(raw: unknown): Promise<ProcessResult> 
     return { status: "duplicate", eventId: event.eventId };
   }
 
-  // Dispatch any struggle alerts through the central dispatcher (post-commit so the
-  // notification rows reflect committed progress; the dispatcher is itself idempotent).
-  if (struggleIntents.length > 0) {
-    await buildAndDispatch(struggleIntents);
+  // Dispatch any struggle alerts + reward goal-met notifications through the central
+  // dispatcher (post-commit so intents reflect committed progress; the dispatcher is
+  // idempotent and cap-respecting). Reward goal-met raises the existing REWARD_REDEEMED
+  // reminder — it NEVER changes reward status (Principle VI, research §4).
+  const goalIntents = await goalMetIntentsForChild(event.familyId, event.childId);
+  const intents = [...struggleIntents, ...goalIntents];
+  if (intents.length > 0) {
+    await buildAndDispatch(intents);
   }
 
   return { status: "processed", eventId: event.eventId };

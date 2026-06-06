@@ -42,9 +42,20 @@ const configSchema = z.object({
     .default("false")
     .transform((v) => v === "true"),
 
-  // Object storage (login-card images) — local-filesystem dev stub now, R2/S3 in Phase 7
+  // Object storage (login-card images, attachments) — Phase 7 (research.md §6/§7).
+  // Backend selected by STORAGE_BACKEND; dev keeps the local-filesystem stub, non-dev
+  // uses a private S3/R2 bucket behind the unchanged put/get interface.
+  STORAGE_BACKEND: z.enum(["local", "s3"]).default("local"),
   STORAGE_DIR: z.string().default("./storage"),
-  STORAGE_PUBLIC_URL: z.string().default("http://localhost:4000/storage"),
+  // Now points at the authorized /files route (was /storage) per research §7.
+  STORAGE_PUBLIC_URL: z.string().default("http://localhost:4000/files"),
+  // S3 / Cloudflare R2 (used when STORAGE_BACKEND=s3) — one adapter serves both.
+  STORAGE_S3_ENDPOINT: z.string().optional(),
+  STORAGE_S3_REGION: z.string().default("auto"),
+  STORAGE_S3_BUCKET: z.string().optional(),
+  STORAGE_S3_ACCESS_KEY_ID: z.string().optional(),
+  STORAGE_S3_SECRET_ACCESS_KEY: z.string().optional(),
+  STORAGE_S3_SIGNED_URL_TTL: z.coerce.number().int().positive().default(300),
 
   // Mailer
   MAILER_TRANSPORT: z.enum(["stub", "smtp"]).default("stub"),
@@ -96,6 +107,25 @@ const configSchema = z.object({
   PUSH_PROVIDER: z.enum(["stub", "fcm"]).default("stub"),
   FCM_PROJECT_ID: z.string().optional(),
   FCM_CREDENTIALS_JSON: z.string().optional(),
+}).superRefine((data, ctx) => {
+  // Fail fast: selecting the S3/R2 backend requires bucket + credentials so the app
+  // never silently writes nowhere (quickstart.md §1, research.md §6).
+  if (data.STORAGE_BACKEND === "s3") {
+    const required = [
+      "STORAGE_S3_BUCKET",
+      "STORAGE_S3_ACCESS_KEY_ID",
+      "STORAGE_S3_SECRET_ACCESS_KEY",
+    ] as const;
+    for (const key of required) {
+      if (!data[key]) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: `${key} is required when STORAGE_BACKEND=s3`,
+        });
+      }
+    }
+  }
 });
 
 const parsed = configSchema.safeParse(process.env);

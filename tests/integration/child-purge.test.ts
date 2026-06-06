@@ -90,11 +90,17 @@ describe("child purge lifecycle", () => {
     const uniq = Math.random().toString(36).slice(2, 8);
     const username = `purge_c_${uniq}`;
     const child = await createChild(familyId, childInput(username));
+    // Phase 7: a child-scoped reward must not block purge and must be removed with the child.
+    const reward = await prisma.reward.create({
+      data: { familyId, childId: child.id, title: "Purge reward", status: "ACTIVE" },
+    });
     await softDeleteChild(familyId, child.id);
 
     const purged = await purgeDueSoftDeleted(new Date(Date.now() + SEVEN_DAYS + 1000));
     expect(purged).toContain(child.id);
     expect(await prisma.child.findUnique({ where: { id: child.id } })).toBeNull();
+    // The child's rewards are gone too (data-model.md relationships, FR purge path).
+    expect(await prisma.reward.findUnique({ where: { id: reward.id } })).toBeNull();
 
     // The username is free — a brand-new child can take it.
     const recreated = await createChild(familyId, childInput(username));

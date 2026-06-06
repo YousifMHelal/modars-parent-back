@@ -4,6 +4,7 @@ export const ErrorCode = {
   NOT_FOUND: "NOT_FOUND",
   UNAUTHORIZED: "UNAUTHORIZED",
   FORBIDDEN: "FORBIDDEN",
+  STORAGE_UNAVAILABLE: "STORAGE_UNAVAILABLE",
   CONFLICT: "CONFLICT",
   PLAN_LIMIT_REACHED: "PLAN_LIMIT_REACHED",
   RESTORE_WINDOW_EXPIRED: "RESTORE_WINDOW_EXPIRED",
@@ -41,6 +42,22 @@ export class NotFoundError extends AppError {
   constructor(message = "Resource not found") {
     super(404, ErrorCode.NOT_FOUND, message);
     this.name = "NotFoundError";
+  }
+}
+
+/** Authenticated but the object/resource belongs to another family (Principle V, 403). */
+export class ForbiddenError extends AppError {
+  constructor(message = "Forbidden") {
+    super(403, ErrorCode.FORBIDDEN, message);
+    this.name = "ForbiddenError";
+  }
+}
+
+/** Storage backend unreachable while serving a file (FR-015, 503). */
+export class StorageUnavailableError extends AppError {
+  constructor(message = "Storage temporarily unavailable") {
+    super(503, ErrorCode.STORAGE_UNAVAILABLE, message);
+    this.name = "StorageUnavailableError";
   }
 }
 

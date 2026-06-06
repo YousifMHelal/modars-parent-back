@@ -9,6 +9,8 @@ describe("Permission matrix", () => {
     it("can manage billing", () => expect(can("owner", "billing.manage")).toBe(true));
     it("can manage co-parents", () => expect(can("owner", "co_parent.manage")).toBe(true));
     it("can delete family", () => expect(can("owner", "family.delete")).toBe(true));
+    it("can view rewards", () => expect(can("owner", "rewards.view")).toBe(true));
+    it("can manage rewards", () => expect(can("owner", "rewards.manage")).toBe(true));
     it("cannot use child session", () => expect(can("owner", "child.session")).toBe(false));
   });
 
@@ -21,6 +23,8 @@ describe("Permission matrix", () => {
     it("cannot delete family", () => expect(can("co_parent", "family.delete")).toBe(false));
     it("can reset child credentials", () =>
       expect(can("co_parent", "child.credentials")).toBe(true));
+    it("can view rewards", () => expect(can("co_parent", "rewards.view")).toBe(true));
+    it("can manage rewards", () => expect(can("co_parent", "rewards.manage")).toBe(true));
     it("cannot use child session", () => expect(can("co_parent", "child.session")).toBe(false));
   });
 
@@ -38,6 +42,8 @@ describe("Permission matrix", () => {
       "co_parent.manage",
       "account.settings",
       "family.delete",
+      "rewards.view",
+      "rewards.manage",
     ];
 
     for (const action of parentActions) {
