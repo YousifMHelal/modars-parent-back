@@ -150,6 +150,33 @@ enum PaymentIntentStatus {
   FAILED
 }
 
+// ── Phase 6: Background jobs & notifications enums (data-model.md §G) ──────────
+
+enum NotificationSource {
+  REMINDER
+  BILLING
+  SYSTEM
+}
+
+enum NotificationChannel {
+  PUSH
+  EMAIL
+  WHATSAPP
+}
+
+enum DispatchStatus {
+  PENDING
+  SENT
+  FAILED
+  SUPPRESSED
+  DEAD_LETTERED
+}
+
+enum PushPlatform {
+  FCM
+  APNS
+}
+
 // ── Models ────────────────────────────────────────────────────────────────────
 
 model Family {
@@ -174,6 +201,7 @@ model Family {
   coParentInvitations CoParentInvitation[]
   paymentIntents PaymentIntent[]
   paymentMethods PaymentMethod[]
+  pushTokens     PushToken[]
 }
 
 model Parent {
@@ -250,20 +278,26 @@ model Child {
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
   deletedAt           DateTime?
+  // Phase 6 (additive): set to deletedAt + 7d on soft-delete, cleared on restore.
+  // The purge worker selects purgeAfter <= now (data-model.md §E).
+  purgeAfter          DateTime?
 
-  family          Family            @relation(fields: [familyId], references: [id], onDelete: Restrict)
-  sessions        Session[]
-  subjectProgress SubjectProgress[]
-  homework        Homework[]
-  badges          Badge[]
-  reminderConfigs ReminderConfig[]
-  notifications   Notification[]
-  rewards         Reward[]
-  conversations   Conversation[]
-  consentRecords  ConsentRecord[]
-  authSessions    AuthSession[]
+  family           Family            @relation(fields: [familyId], references: [id], onDelete: Restrict)
+  sessions         Session[]
+  subjectProgress  SubjectProgress[]
+  homework         Homework[]
+  badges           Badge[]
+  reminderConfigs  ReminderConfig[]
+  notifications    Notification[]
+  rewards          Reward[]
+  conversations    Conversation[]
+  consentRecords   ConsentRecord[]
+  authSessions     AuthSession[]
+  pushTokens       PushToken[]
+  struggleTrackers StruggleTracker[]
 
   @@index([familyId])
+  @@index([purgeAfter])
 }
 
 model Plan {
@@ -502,9 +536,71 @@ model Notification {
   createdAt DateTime              @default(now())
   updatedAt DateTime              @updatedAt
 
+  // Phase 6 (additive) — central dispatch + daily cap (data-model.md §A).
+  type             ReminderType?         // source reminder type (null for billing/system notices)
+  source           NotificationSource    @default(SYSTEM)
+  priorityRank     Int                   @default(0) // resolved per-type rank (1 = highest)
+  channels         NotificationChannel[]             // delivery channels for this notification
+  capDay           String?               // Asia/Riyadh civil date YYYY-MM-DD this counts against
+  countsAgainstCap Boolean               @default(false)
+  dispatchStatus   DispatchStatus        @default(PENDING)
+  sentAt           DateTime?
+  attemptCount     Int                   @default(0)
+
   family Family @relation(fields: [familyId], references: [id], onDelete: Restrict)
   child  Child? @relation(fields: [childId], references: [id], onDelete: Restrict)
 
+  @@unique([childId, capDay, type])
+  @@index([familyId])
+  @@index([childId, capDay])
+}
+
+// ── Phase 6: Push tokens, session-event ledger, struggle tracker ──────────────
+
+model PushToken {
+  id         String       @id @default(cuid())
+  familyId   String
+  parentId   String? // owning parent (parent-addressed push)
+  childId    String? // owning child (child-addressed push)
+  platform   PushPlatform
+  token      String
+  disabledAt DateTime? // set when the provider reports the token invalid
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  family Family @relation(fields: [familyId], references: [id], onDelete: Restrict)
+  child  Child? @relation(fields: [childId], references: [id], onDelete: Restrict)
+
+  @@unique([token])
+  @@index([familyId])
+  @@index([childId])
+}
+
+model ProcessedSessionEvent {
+  id          String    @id @default(cuid())
+  eventId     String    @unique // dedup key from the AI-pipeline event (FR-019/022)
+  childId     String
+  familyId    String // resolved from the event payload (FR-003)
+  outcome     String // started | completed | abandoned
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+
+  @@index([eventId])
+  @@index([childId])
+}
+
+model StruggleTracker {
+  id                    String    @id @default(cuid())
+  familyId              String
+  childId               String
+  topic                 String
+  consecutiveLowMastery Int       @default(0)
+  lastAlertedAt         DateTime?
+  updatedAt             DateTime  @updatedAt
+
+  child Child @relation(fields: [childId], references: [id], onDelete: Restrict)
+
+  @@unique([childId, topic])
   @@index([familyId])
 }
 

@@ -23,6 +23,32 @@ export interface ReminderCatalogEntry {
   defaultRecipient: ReminderRecipientLabel;
   /** Whether this type renders a settings panel. */
   hasSettings: boolean;
+  /**
+   * Fixed per-type notification priority rank (research.md §3, FR-008a). Lower =
+   * higher priority; the central dispatcher delivers the lowest-rank intents first
+   * when more than the daily cap are eligible. 1 = MISSED_SESSION … 9 = REWARD_REDEEMED.
+   */
+  priorityRank: number;
+}
+
+// The fixed priority tier (research.md §3). Encoded once here; the dispatcher and the
+// stored Notification.priorityRank both read from it so a new reminder type can never
+// silently jump the cap (it must be given a rank).
+export const REMINDER_PRIORITY_RANK: Record<ReminderType, number> = {
+  MISSED_SESSION: 1,
+  STRUGGLE_ALERT: 2,
+  HOMEWORK_DUE: 3,
+  EXAM_COUNTDOWN: 4,
+  STREAK_PROTECTION: 5,
+  DAILY_STUDY: 6,
+  WEEKLY_SUMMARY: 7,
+  ACHIEVEMENT: 8,
+  REWARD_REDEEMED: 9,
+};
+
+/** The fixed priority rank for a reminder type (lower = higher priority). */
+export function reminderPriorityRank(type: ReminderType): number {
+  return REMINDER_PRIORITY_RANK[type];
 }
 
 /** The 9 reminder types in the mock's fixed display order. */
@@ -34,6 +60,7 @@ export const REMINDER_CATALOG: readonly ReminderCatalogEntry[] = [
     description: "Reminds your child to start their learning session",
     defaultRecipient: "Child",
     hasSettings: true,
+    priorityRank: 6,
   },
   {
     id: "homework-due",
@@ -42,6 +69,7 @@ export const REMINDER_CATALOG: readonly ReminderCatalogEntry[] = [
     description: "Alert before homework deadlines",
     defaultRecipient: "Both",
     hasSettings: true,
+    priorityRank: 3,
   },
   {
     id: "streak-protection",
@@ -50,6 +78,7 @@ export const REMINDER_CATALOG: readonly ReminderCatalogEntry[] = [
     description: "Reminds child to keep their streak alive",
     defaultRecipient: "Child",
     hasSettings: true,
+    priorityRank: 5,
   },
   {
     id: "missed-session",
@@ -58,6 +87,7 @@ export const REMINDER_CATALOG: readonly ReminderCatalogEntry[] = [
     description: "Notifies you when child misses scheduled sessions",
     defaultRecipient: "Parent",
     hasSettings: true,
+    priorityRank: 1,
   },
   {
     id: "weekly-summary",
@@ -66,6 +96,7 @@ export const REMINDER_CATALOG: readonly ReminderCatalogEntry[] = [
     description: "Weekly overview of your child's progress",
     defaultRecipient: "Parent",
     hasSettings: true,
+    priorityRank: 7,
   },
   {
     id: "struggle-alert",
@@ -74,6 +105,7 @@ export const REMINDER_CATALOG: readonly ReminderCatalogEntry[] = [
     description: "Alert when child struggles on same topic repeatedly",
     defaultRecipient: "Parent",
     hasSettings: false,
+    priorityRank: 2,
   },
   {
     id: "exam-countdown",
@@ -82,6 +114,7 @@ export const REMINDER_CATALOG: readonly ReminderCatalogEntry[] = [
     description: "Daily reminders leading up to exam dates",
     defaultRecipient: "Both",
     hasSettings: true,
+    priorityRank: 4,
   },
   {
     id: "achievement",
@@ -90,6 +123,7 @@ export const REMINDER_CATALOG: readonly ReminderCatalogEntry[] = [
     description: "Celebrate badges and level-ups",
     defaultRecipient: "Both",
     hasSettings: false,
+    priorityRank: 8,
   },
   {
     id: "reward-redeemed",
@@ -98,6 +132,7 @@ export const REMINDER_CATALOG: readonly ReminderCatalogEntry[] = [
     description: "Notifies when child reaches a reward goal",
     defaultRecipient: "Parent",
     hasSettings: false,
+    priorityRank: 9,
   },
 ];
 

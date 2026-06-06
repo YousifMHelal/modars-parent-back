@@ -29,9 +29,10 @@ export default tseslint.config(
     },
   },
   {
-    // Services are the only data-access layer; db/** and server.ts (lifecycle bootstrap)
-    // are also permitted to import the Prisma client directly.
-    files: ["**/*.service.ts", "src/db/**/*.ts", "src/server.ts"],
+    // Services are the only data-access layer; db/** and the lifecycle bootstraps
+    // (server.ts web process, worker.ts job process) are also permitted to import the
+    // Prisma client directly (connect/disconnect).
+    files: ["**/*.service.ts", "src/db/**/*.ts", "src/server.ts", "src/worker.ts"],
     rules: {
       "no-restricted-imports": "off",
     },

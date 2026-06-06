@@ -110,3 +110,47 @@ Redis being down alone does **not** cause a 503.
 ## Environment variables
 
 See `.env.example` for all required and optional keys with descriptions.
+
+## Background jobs & notifications worker (Phase 6)
+
+Phase 6 adds a durable **BullMQ + Redis** worker substrate. The web process
+(`npm run dev` / `server.ts`) only **enqueues**; a separate **worker process**
+runs the jobs:
+
+```bash
+npm run worker        # boots all BullMQ workers + the repeatable schedulers
+```
+
+### Queues
+
+| Queue | Trigger | What it does |
+|-------|---------|--------------|
+| `session-events` | enqueued by the AI-pipeline producer | validates the locked session event, dedupes on `eventId`, drives homework transitions + progress/XP/streak + struggle detection (one transaction, exactly-once) |
+| `notifications` | enqueued by the central dispatcher | delivers one notification on one channel (push/email); retries with backoff; dead-letters on exhaustion |
+| `reminders-sweep` | repeatable (every 15 min) | evaluates each child's reminders, applies the central **max-3/child/day** cap, runs the time-driven homework `OVERDUE` transition, and dispatches renewal/dunning billing notices |
+| `child-purge` | repeatable (hourly) | permanently removes children 7 days after soft-delete, releasing the username |
+| `subscription-purge` | repeatable (hourly) | permanently removes canceled subscriptions past their retain deadline |
+
+All workers call **services** (never Prisma directly), resolve `familyId` from the
+record they process, and apply state-mutating effects **idempotently**. Exhausted
+jobs are retained (not dropped) and logged via pino. The single central dispatcher
+(`modules/notifications`) is the **only** place the daily cap and per-type priority
+tier are enforced.
+
+### Phase 6 environment keys
+
+`WORKER_CONCURRENCY`, `REMINDERS_SWEEP_CRON`, `PURGE_SWEEP_CRON`,
+`PLATFORM_TZ_OFFSET_MINUTES` (Asia/Riyadh day boundary, default 180),
+`DAILY_NOTIFICATION_CAP` (default 3), `STRUGGLE_CONSECUTIVE_THRESHOLD` (default 3),
+`STRUGGLE_MASTERY_THRESHOLD` (default 50), `PUSH_PROVIDER` (`stub` | `fcm`),
+`FCM_PROJECT_ID`, `FCM_CREDENTIALS_JSON`. See `.env.example` for defaults.
+
+### Push-token registration (the only new HTTP surface)
+
+```
+POST   /notifications/push-tokens   { platform: "FCM"|"APNS", token }   (auth-gated)
+DELETE /notifications/push-tokens?token=...                              (auth-gated)
+```
+
+Family/owner are taken from the verified session, never the body. Both parent and
+child sessions may register a device token.

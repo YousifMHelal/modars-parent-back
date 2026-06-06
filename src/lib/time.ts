@@ -151,6 +151,38 @@ export function durationLabel(minutes: number): string {
   return `${minutes} min`;
 }
 
+// ── Phase 6: Asia/Riyadh day boundary (research.md §4, FR-011) ─────────────────
+//
+// The platform's civil day is fixed to Asia/Riyadh (UTC+3, no DST), expressed as a
+// constant offset so the helpers stay dependency-free and deterministic with an
+// injected `now`. The notification daily-cap window and every sweep "today"
+// comparison key off `riyadhCapDay`.
+
+/** Fixed Asia/Riyadh offset in minutes (UTC+3). Overridable for tests/config. */
+export const RIYADH_OFFSET_MINUTES = 180;
+
+/**
+ * The Asia/Riyadh civil date (`YYYY-MM-DD`) an instant falls on, via a fixed offset.
+ * An instant just before Riyadh midnight maps to the prior day; just after, the next.
+ */
+export function riyadhCapDay(now: Date, offsetMinutes: number = RIYADH_OFFSET_MINUTES): string {
+  const shifted = new Date(now.getTime() + offsetMinutes * MS_PER_MINUTE);
+  // Read the shifted instant's UTC fields so server local time never leaks in.
+  const year = shifted.getUTCFullYear();
+  const month = (shifted.getUTCMonth() + 1).toString().padStart(2, "0");
+  const day = shifted.getUTCDate().toString().padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/** True when two instants fall on the same Asia/Riyadh civil day. */
+export function sameRiyadhDay(
+  a: Date,
+  b: Date,
+  offsetMinutes: number = RIYADH_OFFSET_MINUTES,
+): boolean {
+  return riyadhCapDay(a, offsetMinutes) === riyadhCapDay(b, offsetMinutes);
+}
+
 /** Parses a short duration string like "15m", "30d", "900s" into seconds.
  *  Returns `fallback` when the input doesn't match the `<number><s|m|h|d>` form. */
 export function parseTtlToSeconds(raw: string, fallback: number): number {

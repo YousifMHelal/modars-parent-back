@@ -7,6 +7,7 @@
   "scripts": {
     "postinstall": "prisma generate",
     "dev": "tsx watch src/server.ts",
+    "worker": "tsx src/worker.ts",
     "build": "tsc --project tsconfig.json",
     "start": "node dist/server.js",
     "test": "vitest run",
@@ -26,6 +27,7 @@
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "argon2": "^0.44.0",
+    "bullmq": "^5.78.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^5.0.1",

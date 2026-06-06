@@ -1,3 +1,4 @@
+import pino from "pino";
 import prisma from "../../db/prisma.js";
 import {
   NotFoundError,
@@ -5,7 +6,9 @@ import {
   ProrationUncomputableError,
   RetainWindowElapsedError,
 } from "../../lib/errors.js";
+import { Prisma } from "../../generated/prisma/client.js";
 import type { Subscription, Invoice, Plan } from "../../generated/prisma/client.js";
+import { buildAndDispatch, type NotificationIntent } from "../notifications/notifications.service.js";
 import { getPaymentProvider } from "../../lib/payments/index.js";
 import type { ChargeMetadata } from "../../lib/payments/provider.js";
 import { prorate } from "../../lib/proration.js";
@@ -25,6 +28,8 @@ import type {
 // 404 (Principle I, data-model.md §4). This service NEVER sets subscription status to
 // ACTIVE/PAST_DUE — those transitions originate only from the verified webhook
 // (Principle VI); cancel/reactivate are the only parent-set status changes (no payment).
+
+const logger = pino({ name: "billing.service" });
 
 // ── Family-scope guards (data-model.md §4, Principle I) ───────────────────────
 
@@ -535,4 +540,100 @@ export async function reactivate(
   });
 
   return getBillingHistory(familyId);
+}
+
+// ── Phase 6: Deferred billing jobs (FR-023/024, research.md §9) ───────────────
+
+/**
+ * Permanently remove canceled subscriptions past their 30-day retain deadline
+ * (`status = CANCELED AND canceledEffectiveAt <= now`), idempotently (FR-023). The
+ * retain marker was set by Phase 5 `cancel`. Each delete is re-checked in-tx so a
+ * reactivation between scan and delete is excluded. Returns the purged subscription ids.
+ */
+export async function purgeDueCanceled(now: Date = new Date()): Promise<string[]> {
+  const due = await prisma.subscription.findMany({
+    where: { status: "CANCELED", canceledEffectiveAt: { lte: now } },
+    select: { id: true },
+  });
+
+  const purged: string[] = [];
+  for (const candidate of due) {
+    try {
+      await prisma.$transaction(async (tx) => {
+        const fresh = await tx.subscription.findFirst({
+          where: { id: candidate.id, status: "CANCELED", canceledEffectiveAt: { lte: now } },
+          select: { id: true },
+        });
+        if (!fresh) return; // reactivated or already purged — skip
+
+        // Clear dependents (FK onDelete: Restrict) before the hard delete.
+        await tx.invoice.deleteMany({ where: { subscriptionId: candidate.id } });
+        await tx.paymentIntent.deleteMany({ where: { subscriptionId: candidate.id } });
+        await tx.subscription.delete({ where: { id: candidate.id } });
+      });
+      purged.push(candidate.id);
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2025") {
+        continue; // already gone — idempotent no-op
+      }
+      logger.warn({ err, subscriptionId: candidate.id }, "subscription purge skipped");
+    }
+  }
+
+  if (purged.length > 0) {
+    logger.info({ purgedCount: purged.length, purged }, "canceled subscriptions purged");
+  }
+  return purged;
+}
+
+/**
+ * Build renewal + failed-payment/dunning notification intents for the families whose
+ * subscription is in a notify-worthy state, and dispatch them through the central
+ * dispatcher (source=BILLING; cap rules apply where child-addressed — these are
+ * parent-addressed, so uncapped) (FR-024). Renewal upcoming = ACTIVE with
+ * currentPeriodEnd within the lookahead window; dunning = PAST_DUE. Phase 5 webhooks
+ * set the underlying states; Phase 6 only notifies. Returns the count dispatched.
+ */
+const RENEWAL_LOOKAHEAD_MS = 3 * 24 * 60 * 60 * 1000; // notify 3 days before renewal
+
+export async function dispatchBillingNotifications(now: Date = new Date()): Promise<number> {
+  const intents: NotificationIntent[] = [];
+
+  const pastDue = await prisma.subscription.findMany({
+    where: { status: "PAST_DUE" },
+    select: { familyId: true },
+  });
+  for (const sub of pastDue) {
+    intents.push(billingIntent(sub.familyId, "Payment failed", "Your payment didn't go through — update your method to keep access.", now));
+  }
+
+  const renewing = await prisma.subscription.findMany({
+    where: {
+      status: "ACTIVE",
+      currentPeriodEnd: { lte: new Date(now.getTime() + RENEWAL_LOOKAHEAD_MS), gt: now },
+    },
+    select: { familyId: true },
+  });
+  for (const sub of renewing) {
+    intents.push(billingIntent(sub.familyId, "Subscription renewing soon", "Your subscription renews shortly.", now));
+  }
+
+  if (intents.length === 0) return 0;
+  const result = await buildAndDispatch(intents, now);
+  return result.delivered;
+}
+
+function billingIntent(familyId: string, title: string, body: string, now: Date): NotificationIntent {
+  return {
+    familyId,
+    childId: null,
+    recipient: "PARENT",
+    type: null,
+    source: "BILLING",
+    channels: ["PUSH", "EMAIL"],
+    title,
+    body,
+    triggerTime: now,
+    countsAgainstCap: false,
+  };
 }

@@ -15,6 +15,7 @@ import childrenRouter from "./modules/children/children.routes.js";
 import settingsRouter from "./modules/settings/settings.routes.js";
 import webhooksRouter from "./modules/webhooks/webhooks.routes.js";
 import billingRouter from "./modules/billing/billing.routes.js";
+import notificationsRouter from "./modules/notifications/notifications.routes.js";
 
 export function createApp(): Application {
   const app = express();
@@ -57,6 +58,7 @@ export function createApp(): Application {
   app.use(childrenRouter);
   app.use(settingsRouter);
   app.use(billingRouter);
+  app.use(notificationsRouter);
 
   // 404 + centralized error handler (must be last)
   app.use(notFound);

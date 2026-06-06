@@ -77,6 +77,25 @@ const configSchema = z.object({
   PAYMENT_WEBHOOK_SECRET: z.string().optional(),
   // Per-extra-child overflow price in minor units (SAR 25 = 2500 halalas).
   OVERFLOW_PRICE_MINOR: z.coerce.number().int().positive().default(2500),
+
+  // Phase 6 — Background jobs & notifications (plan.md, quickstart.md §1)
+  // BullMQ worker concurrency per queue.
+  WORKER_CONCURRENCY: z.coerce.number().int().positive().default(5),
+  // Repeatable-job cron expressions for the sweeps (BullMQ `repeat.pattern`).
+  REMINDERS_SWEEP_CRON: z.string().default("*/15 * * * *"),
+  PURGE_SWEEP_CRON: z.string().default("0 * * * *"),
+  // Fixed platform day-boundary offset in minutes (Asia/Riyadh = UTC+3, no DST = 180).
+  PLATFORM_TZ_OFFSET_MINUTES: z.coerce.number().int().default(180),
+  // The central daily notification cap per child (FR-007).
+  DAILY_NOTIFICATION_CAP: z.coerce.number().int().positive().default(3),
+  // Struggle detection: consecutive below-threshold sessions on a topic that raise an alert.
+  STRUGGLE_CONSECUTIVE_THRESHOLD: z.coerce.number().int().positive().default(3),
+  // Mastery percentage (0–100) below which a session counts as "low mastery".
+  STRUGGLE_MASTERY_THRESHOLD: z.coerce.number().int().min(0).max(100).default(50),
+  // Push channel provider. The dev stub logs (mirrors the mailer/payments stubs).
+  PUSH_PROVIDER: z.enum(["stub", "fcm"]).default("stub"),
+  FCM_PROJECT_ID: z.string().optional(),
+  FCM_CREDENTIALS_JSON: z.string().optional(),
 });
 
 const parsed = configSchema.safeParse(process.env);
@@ -111,6 +130,19 @@ if (parsed.data.NODE_ENV === "production") {
     if (missing.length) {
       throw new Error(
         `Refusing to start in production without payment secrets: ${missing.join(", ")}`,
+      );
+    }
+  }
+
+  // The push stub only logs. In production with the real FCM provider selected, the
+  // FCM credentials must be present so notifications can never silently no-op.
+  if (parsed.data.PUSH_PROVIDER === "fcm") {
+    const missingPush = (["FCM_PROJECT_ID", "FCM_CREDENTIALS_JSON"] as const).filter(
+      (key) => !parsed.data[key],
+    );
+    if (missingPush.length) {
+      throw new Error(
+        `Refusing to start in production without FCM credentials: ${missingPush.join(", ")}`,
       );
     }
   }

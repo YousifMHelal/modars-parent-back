@@ -197,8 +197,12 @@ export async function reactivateChild(familyId: string, childId: string): Promis
 
 export async function softDeleteChild(familyId: string, childId: string): Promise<void> {
   await assertChildInFamily(familyId, childId);
+  const now = new Date();
+  // Phase 6: set the purge marker to deletedAt + 7d so the purge worker's query is a
+  // cheap indexed `purgeAfter <= now` (data-model.md §E, FR-012).
+  const purgeAfter = new Date(now.getTime() + RESTORE_WINDOW_MS);
   await prisma.$transaction([
-    prisma.child.update({ where: { id: childId }, data: { deletedAt: new Date() } }),
+    prisma.child.update({ where: { id: childId }, data: { deletedAt: now, purgeAfter } }),
     prisma.authSession.updateMany({
       where: { childId, revokedAt: null },
       data: { revokedAt: new Date() },
@@ -223,5 +227,90 @@ export async function restoreChild(familyId: string, childId: string): Promise<C
 
   await assertSlotAvailable(familyId);
 
-  return prisma.child.update({ where: { id: childId }, data: { deletedAt: null } });
+  // Clear both deletedAt and the Phase 6 purge marker so the purge worker excludes it.
+  return prisma.child.update({
+    where: { id: childId },
+    data: { deletedAt: null, purgeAfter: null },
+  });
+}
+
+// ── Phase 6: Soft-delete purge + username release (FR-012–014, research.md §10) ──
+
+/**
+ * Permanently remove children whose 7-day soft-delete window has elapsed
+ * (`purgeAfter <= now`), releasing the username via the unique constraint on hard
+ * delete. Each candidate is re-checked inside its own transaction so a child restored
+ * just before the run (deletedAt/purgeAfter cleared) is excluded (FR-013). Idempotent:
+ * an already-purged or not-yet-due child is a no-op (FR-014). Returns the purged ids.
+ */
+export async function purgeDueSoftDeleted(now: Date = new Date()): Promise<string[]> {
+  const due = await prisma.child.findMany({
+    where: { purgeAfter: { lte: now }, deletedAt: { not: null } },
+    select: { id: true, familyId: true },
+  });
+
+  const purged: string[] = [];
+  for (const candidate of due) {
+    try {
+      await prisma.$transaction(async (tx) => {
+        // Re-check inside the tx: a restore between the scan and now clears purgeAfter.
+        const fresh = await tx.child.findFirst({
+          where: { id: candidate.id, purgeAfter: { lte: now }, deletedAt: { not: null } },
+          select: { id: true },
+        });
+        if (!fresh) return; // restored or already purged — skip
+
+        await hardDeleteChildDependents(tx, candidate.id);
+        await tx.child.delete({ where: { id: candidate.id } });
+      });
+      purged.push(candidate.id);
+    } catch (err) {
+      // A concurrent purge/restore may make the delete a no-op; log and continue.
+      logger.warn({ err, childId: candidate.id }, "child purge skipped (concurrent change)");
+    }
+  }
+
+  if (purged.length > 0) {
+    logger.info({ purgedCount: purged.length, purged }, "soft-deleted children purged");
+  }
+  return purged;
+}
+
+/** Remove a child's dependent rows before the hard delete (FK onDelete: Restrict). */
+async function hardDeleteChildDependents(tx: Prisma.TransactionClient, childId: string): Promise<void> {
+  // Order matters: TopicProgress hangs off SubjectProgress.
+  const subjectProgress = await tx.subjectProgress.findMany({
+    where: { childId },
+    select: { id: true },
+  });
+  const subjectProgressIds = subjectProgress.map((s) => s.id);
+  if (subjectProgressIds.length > 0) {
+    await tx.topicProgress.deleteMany({
+      where: { subjectProgressId: { in: subjectProgressIds } },
+    });
+  }
+  await tx.subjectProgress.deleteMany({ where: { childId } });
+
+  await tx.struggleTracker.deleteMany({ where: { childId } });
+  await tx.pushToken.deleteMany({ where: { childId } });
+  await tx.notification.deleteMany({ where: { childId } });
+  await tx.reminderConfig.deleteMany({ where: { childId } });
+  await tx.homework.deleteMany({ where: { childId } });
+  await tx.session.deleteMany({ where: { childId } });
+  await tx.badge.deleteMany({ where: { childId } });
+  await tx.reward.deleteMany({ where: { childId } });
+  await tx.consentRecord.deleteMany({ where: { childId } });
+
+  // Conversations have Message children (onDelete: Restrict) — clear messages first.
+  const conversations = await tx.conversation.findMany({
+    where: { childId },
+    select: { id: true },
+  });
+  const conversationIds = conversations.map((c) => c.id);
+  if (conversationIds.length > 0) {
+    await tx.message.deleteMany({ where: { conversationId: { in: conversationIds } } });
+  }
+  await tx.conversation.deleteMany({ where: { childId } });
+
+  await tx.authSession.deleteMany({ where: { childId } });
 }
