@@ -3,6 +3,8 @@ import { hashSecret } from "../../src/lib/hashing.js";
 import { signAccess } from "../../src/lib/jwt.js";
 import type { PrincipalRole, PrincipalType } from "../../src/lib/jwt.js";
 import { PLANS_DATA } from "../../prisma/seed/mock-data.js";
+import { signFakeBody, fakeProviderRef } from "../../src/lib/payments/fake.js";
+import type { ProviderEvent, ProviderEventType } from "../../src/lib/payments/provider.js";
 
 // Two-family fixture for the Phase 4 write tests.
 //   Family A: owner + co-parent + one active child + a PENDING-or-given subscription.
@@ -20,6 +22,8 @@ export interface WriteFixture {
   familyBOwnerId: string;
   familyBChildId: string;
   planKey: "STARTER" | "FAMILY" | "FAMILY_PRO";
+  subscriptionId: string;
+  familyBSubscriptionId: string;
 }
 
 const TEST_FAMILY_NAMES = ["write-test-family-a", "write-test-family-b"];
@@ -124,7 +128,7 @@ export async function setupWriteFixture(
   });
 
   const plan = await ensurePlan(planKey);
-  await prisma.subscription.create({
+  const subscriptionA = await prisma.subscription.create({
     data: {
       familyId: familyA.id,
       planId: plan.id,
@@ -188,6 +192,17 @@ export async function setupWriteFixture(
       passwordHash: childPasswordHash,
     },
   });
+  // Family B subscription + a paid invoice, so cross-family invoice probes (T039/T041)
+  // have a real foreign invoice id to be denied (404).
+  const subscriptionB = await prisma.subscription.create({
+    data: {
+      familyId: familyB.id,
+      planId: plan.id,
+      status: "ACTIVE",
+      billingCycle: "MONTHLY",
+      currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    },
+  });
 
   return {
     familyAId: familyA.id,
@@ -200,7 +215,54 @@ export async function setupWriteFixture(
     familyBOwnerId: familyBOwner.id,
     familyBChildId: familyBChild.id,
     planKey,
+    subscriptionId: subscriptionA.id,
+    familyBSubscriptionId: subscriptionB.id,
   };
+}
+
+// ── Phase 5 helpers ───────────────────────────────────────────────────────────
+
+/**
+ * A PENDING family with a plan and one child (the Phase 4 starting point for US1). The
+ * default setupWriteFixture already produces exactly this — re-exported under the
+ * spec's name (T014) so billing tests read intentionally.
+ */
+export function pendingFamilyWithPlanAndChild(
+  planKey: "STARTER" | "FAMILY" | "FAMILY_PRO" = "FAMILY",
+): Promise<WriteFixture> {
+  return setupWriteFixture(planKey);
+}
+
+/**
+ * Build a signed fake provider event the webhook will verify (T014). Returns the raw
+ * body bytes and the matching X-Provider-Signature so a test can POST both. The
+ * provider charge ref is derived from the intent id via fakeProviderRef, so callers
+ * pass the intentId (the metadata.intentId) — the same value initiate persisted.
+ */
+export function signFakeEvent(
+  type: ProviderEventType,
+  intentId: string,
+  overrides: {
+    eventId?: string;
+    providerRef?: string;
+    amountMinor?: number;
+    currency?: string;
+    metadata?: Partial<ProviderEvent["data"]["metadata"]>;
+  } = {},
+): { rawBody: Buffer; signature: string; event: ProviderEvent } {
+  const providerRef = overrides.providerRef ?? fakeProviderRef(intentId);
+  const event: ProviderEvent = {
+    id: overrides.eventId ?? `evt_${Math.random().toString(36).slice(2)}`,
+    type,
+    data: {
+      providerRef,
+      ...(overrides.amountMinor !== undefined ? { amountMinor: overrides.amountMinor } : {}),
+      ...(overrides.currency ? { currency: overrides.currency } : {}),
+      metadata: { intentId, ...(overrides.metadata ?? {}) },
+    },
+  };
+  const rawBody = Buffer.from(JSON.stringify(event));
+  return { rawBody, signature: signFakeBody(rawBody), event };
 }
 
 export async function teardownWriteFixture(): Promise<void> {
@@ -212,6 +274,13 @@ export async function teardownWriteFixture(): Promise<void> {
   if (familyIds.length === 0) return;
 
   await prisma.coParentInvitation.deleteMany({ where: { familyId: { in: familyIds } } });
+  // Phase 5: the WebhookEvent ledger is global (no familyId). Clear the test events
+  // (providerEventId starts with "evt_") so a fixed dedup key doesn't carry across runs.
+  await prisma.webhookEvent.deleteMany({ where: { providerEventId: { startsWith: "evt_" } } });
+  // payment intents/methods/invoices reference the subscription/family with
+  // onDelete: Restrict — delete them before the subscription and family rows.
+  await prisma.paymentIntent.deleteMany({ where: { familyId: { in: familyIds } } });
+  await prisma.paymentMethod.deleteMany({ where: { familyId: { in: familyIds } } });
   await prisma.invoice.deleteMany({ where: { subscription: { familyId: { in: familyIds } } } });
   await prisma.subscription.deleteMany({ where: { familyId: { in: familyIds } } });
   await prisma.authSession.updateMany({

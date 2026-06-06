@@ -36,10 +36,22 @@ async function activeChildCount(familyId: string): Promise<number> {
 }
 
 async function assertSlotAvailable(familyId: string): Promise<void> {
-  const [limit, used] = await Promise.all([planChildLimit(familyId), activeChildCount(familyId)]);
+  const { limit, used } = await getSlotUsage(familyId);
   if (used >= limit) {
     throw new PlanLimitReachedError("You've reached your plan's child limit");
   }
+}
+
+/**
+ * The family's plan child limit and current active-child count. Exported so the
+ * Phase 5 billing/overflow path can confirm the family is at its slot limit before
+ * offering the prorated overflow upgrade (research.md §6, FR-013).
+ */
+export async function getSlotUsage(
+  familyId: string,
+): Promise<{ limit: number; used: number; atLimit: boolean }> {
+  const [limit, used] = await Promise.all([planChildLimit(familyId), activeChildCount(familyId)]);
+  return { limit, used, atLimit: used >= limit };
 }
 
 // ── Login card (best-effort, post-commit — FR-011) ────────────────────────────

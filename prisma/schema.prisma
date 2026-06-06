@@ -135,6 +135,21 @@ enum InvitationStatus {
   EXPIRED
 }
 
+// ── Phase 5: Payment & subscription enums ─────────────────────────────────────
+
+enum PaymentPurpose {
+  ACTIVATION
+  RENEWAL
+  OVERFLOW
+  UPGRADE
+}
+
+enum PaymentIntentStatus {
+  CREATED
+  SUCCEEDED
+  FAILED
+}
+
 // ── Models ────────────────────────────────────────────────────────────────────
 
 model Family {
@@ -157,6 +172,8 @@ model Family {
   consentRecords ConsentRecord[]
   authSessions  AuthSession[]
   coParentInvitations CoParentInvitation[]
+  paymentIntents PaymentIntent[]
+  paymentMethods PaymentMethod[]
 }
 
 model Parent {
@@ -280,9 +297,17 @@ model Subscription {
   updatedAt        DateTime           @updatedAt
   deletedAt        DateTime?
 
+  // Phase 5 (additive): cancel-with-retain + provider linkage. A non-null future
+  // canceledEffectiveAt with status CANCELED expresses "canceled but retained".
+  canceledAt             DateTime?
+  canceledEffectiveAt    DateTime?
+  providerCustomerId     String?
+  providerSubscriptionId String?
+
   family   Family    @relation(fields: [familyId], references: [id], onDelete: Restrict)
   plan     Plan      @relation(fields: [planId], references: [id], onDelete: Restrict)
   invoices Invoice[]
+  paymentIntents PaymentIntent[]
 }
 
 model Invoice {
@@ -298,6 +323,55 @@ model Invoice {
   subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
 
   @@index([subscriptionId])
+}
+
+// ── Phase 5: Payment intents, webhook ledger, saved methods ───────────────────
+
+model PaymentIntent {
+  id                  String              @id @default(cuid())
+  familyId            String
+  subscriptionId      String
+  purpose             PaymentPurpose
+  expectedAmountMinor Int
+  currency            String
+  providerRef         String // provider charge/checkout id
+  status              PaymentIntentStatus @default(CREATED)
+  metadata            Json? // e.g. { childDraftId } for OVERFLOW
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  family       Family       @relation(fields: [familyId], references: [id], onDelete: Restrict)
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+
+  @@index([familyId])
+  @@index([providerRef])
+}
+
+model WebhookEvent {
+  id              String    @id @default(cuid())
+  providerEventId String    @unique // the dedup key (research.md §3)
+  type            String
+  receivedAt      DateTime  @default(now())
+  processedAt     DateTime?
+
+  @@index([providerEventId])
+}
+
+model PaymentMethod {
+  id                String   @id @default(cuid())
+  familyId          String
+  providerMethodRef String // provider token; NEVER a raw card number
+  brand             String // "visa" | "mada" | … (display only)
+  last4             String // display only
+  expMonth          Int
+  expYear           Int
+  isDefault         Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  family Family @relation(fields: [familyId], references: [id], onDelete: Restrict)
+
+  @@index([familyId])
 }
 
 model Session {

@@ -13,6 +13,8 @@ import dashboardRouter from "./modules/dashboard/dashboard.routes.js";
 import onboardingRouter from "./modules/onboarding/onboarding.routes.js";
 import childrenRouter from "./modules/children/children.routes.js";
 import settingsRouter from "./modules/settings/settings.routes.js";
+import webhooksRouter from "./modules/webhooks/webhooks.routes.js";
+import billingRouter from "./modules/billing/billing.routes.js";
 
 export function createApp(): Application {
   const app = express();
@@ -30,6 +32,11 @@ export function createApp(): Application {
 
   // Request logging
   app.use(requestLogger);
+
+  // Payment webhook — MUST mount before express.json() so the provider signature
+  // verifies against the exact raw bytes (research.md §2). The router itself applies
+  // express.raw() for this single route; all other routes still get the JSON parser.
+  app.use(webhooksRouter);
 
   // Body parsers
   app.use(express.json());
@@ -49,6 +56,7 @@ export function createApp(): Application {
   app.use(onboardingRouter);
   app.use(childrenRouter);
   app.use(settingsRouter);
+  app.use(billingRouter);
 
   // 404 + centralized error handler (must be last)
   app.use(notFound);

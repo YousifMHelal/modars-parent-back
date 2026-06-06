@@ -65,6 +65,18 @@ const configSchema = z.object({
   APPLE_KEY_ID: z.string().optional(),
   APPLE_PRIVATE_KEY: z.string().optional(),
   APPLE_CALLBACK_URL: z.string().url().optional(),
+
+  // Phase 5 — Payment & subscription (research.md §8, quickstart.md §1)
+  // The provider behind the PaymentProvider interface. Dev/test fall back to the
+  // in-memory fake when the secret keys are absent.
+  PAYMENT_PROVIDER: z.enum(["moyasar", "fake"]).default("moyasar"),
+  // Provider REST secret key — optional in dev so the in-memory fake works without it.
+  PAYMENT_PROVIDER_SECRET_KEY: z.string().optional(),
+  // HMAC secret the webhook verifies the raw body against — optional in dev (the fake
+  // signs deterministically). Required in production by the guard below.
+  PAYMENT_WEBHOOK_SECRET: z.string().optional(),
+  // Per-extra-child overflow price in minor units (SAR 25 = 2500 halalas).
+  OVERFLOW_PRICE_MINOR: z.coerce.number().int().positive().default(2500),
 });
 
 const parsed = configSchema.safeParse(process.env);
@@ -87,6 +99,20 @@ if (parsed.data.NODE_ENV === "production") {
         .map(([name]) => name)
         .join(", ")}`,
     );
+  }
+
+  // The in-memory fake provider is a test/dev affordance only. In production the
+  // real provider secrets must be present so payments can never silently run
+  // against the fake (research.md §8).
+  if (parsed.data.PAYMENT_PROVIDER !== "fake") {
+    const missing = (["PAYMENT_PROVIDER_SECRET_KEY", "PAYMENT_WEBHOOK_SECRET"] as const).filter(
+      (key) => !parsed.data[key],
+    );
+    if (missing.length) {
+      throw new Error(
+        `Refusing to start in production without payment secrets: ${missing.join(", ")}`,
+      );
+    }
   }
 }
 

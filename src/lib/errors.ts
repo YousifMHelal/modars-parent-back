@@ -7,6 +7,12 @@ export const ErrorCode = {
   CONFLICT: "CONFLICT",
   PLAN_LIMIT_REACHED: "PLAN_LIMIT_REACHED",
   RESTORE_WINDOW_EXPIRED: "RESTORE_WINDOW_EXPIRED",
+  // Phase 5 — Payment & subscription
+  SUBSCRIPTION_ALREADY_ACTIVE: "SUBSCRIPTION_ALREADY_ACTIVE",
+  PRORATION_UNCOMPUTABLE: "PRORATION_UNCOMPUTABLE",
+  RETAIN_WINDOW_ELAPSED: "RETAIN_WINDOW_ELAPSED",
+  WEBHOOK_SIGNATURE_INVALID: "WEBHOOK_SIGNATURE_INVALID",
+  AMOUNT_MISMATCH: "AMOUNT_MISMATCH",
   INTERNAL_ERROR: "INTERNAL_ERROR",
 } as const;
 
@@ -66,5 +72,47 @@ export class RestoreWindowExpiredError extends AppError {
   constructor(message = "Restore window has expired") {
     super(410, ErrorCode.RESTORE_WINDOW_EXPIRED, message);
     this.name = "RestoreWindowExpiredError";
+  }
+}
+
+// ── Phase 5: Payment & subscription errors ────────────────────────────────────
+
+/** Initiate attempted on an already-active subscription (FR-001, 409). */
+export class SubscriptionAlreadyActiveError extends AppError {
+  constructor(message = "Subscription is already active") {
+    super(409, ErrorCode.SUBSCRIPTION_ALREADY_ACTIVE, message);
+    this.name = "SubscriptionAlreadyActiveError";
+  }
+}
+
+/** Proration could not be computed (zero/inverted period, or not at slot limit) (422). */
+export class ProrationUncomputableError extends AppError {
+  constructor(message = "Proration could not be computed") {
+    super(422, ErrorCode.PRORATION_UNCOMPUTABLE, message);
+    this.name = "ProrationUncomputableError";
+  }
+}
+
+/** Reactivate attempted after the cancel retain window elapsed (FR-022, 422). */
+export class RetainWindowElapsedError extends AppError {
+  constructor(message = "The reactivation window has elapsed") {
+    super(422, ErrorCode.RETAIN_WINDOW_ELAPSED, message);
+    this.name = "RetainWindowElapsedError";
+  }
+}
+
+/** Webhook signature verification failed (FR-007, 400) — leaks nothing about state. */
+export class WebhookSignatureInvalidError extends AppError {
+  constructor(message = "Invalid webhook signature") {
+    super(400, ErrorCode.WEBHOOK_SIGNATURE_INVALID, message);
+    this.name = "WebhookSignatureInvalidError";
+  }
+}
+
+/** Provider-reported amount did not match the server-computed expected amount (FR-017, 422). */
+export class AmountMismatchError extends AppError {
+  constructor(message = "Payment amount mismatch") {
+    super(422, ErrorCode.AMOUNT_MISMATCH, message);
+    this.name = "AmountMismatchError";
   }
 }
