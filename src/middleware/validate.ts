@@ -36,7 +36,7 @@ export function validate(schemas: ValidateSchemas): RequestHandler {
 
     if (data.body !== undefined) req.body = data.body;
     if (data.params !== undefined) req.params = data.params as Record<string, string>;
-    if (data.query !== undefined) req.query = data.query as Record<string, string>;
+    // Express 5: req.query is a read-only getter — skip reassignment (validated values are still in req.query)
 
     next();
   };

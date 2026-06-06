@@ -15,10 +15,7 @@ const logger = pino(pinoOptions);
 const requestLogger = pinoHttp({
   logger,
   genReqId: (req: IncomingMessage) => {
-    return (
-      (req.headers["x-request-id"] as string | undefined) ??
-      crypto.randomUUID()
-    );
+    return (req.headers["x-request-id"] as string | undefined) ?? crypto.randomUUID();
   },
   customLogLevel: (_req: IncomingMessage, res: ServerResponse) => {
     if (res.statusCode >= 500) return "error";

@@ -6,7 +6,9 @@ import rateLimitMiddleware from "./middleware/rateLimit.js";
 import { notFound } from "./middleware/notFound.js";
 import errorHandler from "./middleware/errorHandler.js";
 import config from "./config/index.js";
+import { configurePassport, passport } from "./lib/oauth.js";
 import healthRouter from "./modules/health/health.routes.js";
+import authRouter from "./modules/auth/auth.routes.js";
 
 export function createApp(): Application {
   const app = express();
@@ -32,8 +34,13 @@ export function createApp(): Application {
   // Rate limiting
   app.use(rateLimitMiddleware);
 
+  // OAuth strategies (no sessions — stateless JWT auth)
+  configurePassport();
+  app.use(passport.initialize());
+
   // Routes
   app.use(healthRouter);
+  app.use(authRouter);
 
   // 404 + centralized error handler (must be last)
   app.use(notFound);

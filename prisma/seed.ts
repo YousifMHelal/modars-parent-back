@@ -38,6 +38,12 @@ async function main(): Promise<void> {
     await tx.invoice.deleteMany();
     await tx.subscription.deleteMany();
     await tx.child.deleteMany();
+    // Phase 2: delete auth-related records before parents/families
+    await tx.emailVerificationToken.deleteMany();
+    await tx.oAuthAccount.deleteMany();
+    // Null out self-FK before bulk delete
+    await tx.authSession.updateMany({ data: { replacedById: null } });
+    await tx.authSession.deleteMany();
     await tx.parent.deleteMany();
     await tx.family.deleteMany();
     await tx.plan.deleteMany();

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { execSync } from "child_process";
 import prisma from "../../src/db/prisma.js";
 
-beforeAll(async () => {
+beforeAll(() => {
   execSync("npx tsx prisma/seed.ts", { stdio: "inherit" });
 });
 
@@ -19,7 +19,9 @@ describe("seed parity — Family & Parent", () => {
   });
 
   it("Parent Sarah Ahmed matches mock values", async () => {
-    const parent = await prisma.parent.findUniqueOrThrow({ where: { email: "sarah.ahmed@example.com" } });
+    const parent = await prisma.parent.findUniqueOrThrow({
+      where: { email: "sarah.ahmed@example.com" },
+    });
     expect(parent.fullName).toBe("Sarah Ahmed");
     expect(parent.role).toBe("OWNER");
   });
@@ -149,7 +151,9 @@ describe("seed parity — Child Ahmed", () => {
 
   it("Ahmed's Mathematics SubjectProgress matches mock", async () => {
     const ahmed = await prisma.child.findUnique({ where: { usernameNormalized: "ahmed.modrs" } });
-    const sp = await prisma.subjectProgress.findUnique({ where: { childId_subject: { childId: ahmed!.id, subject: "Mathematics" } } });
+    const sp = await prisma.subjectProgress.findUnique({
+      where: { childId_subject: { childId: ahmed!.id, subject: "Mathematics" } },
+    });
     expect(sp).not.toBeNull();
     expect(sp!.mastery).toBe(68);
     expect(sp!.coverage).toBe(82);

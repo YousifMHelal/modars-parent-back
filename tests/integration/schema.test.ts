@@ -41,7 +41,7 @@ describe("schema smoke test", () => {
           username: "orphan.test",
           usernameNormalized: "orphan.test",
         },
-      })
+      }),
     ).rejects.toThrow();
   });
 
@@ -76,7 +76,7 @@ describe("schema smoke test", () => {
           username: "Unique.Test",
           usernameNormalized: "unique.test",
         },
-      })
+      }),
     ).rejects.toThrow();
 
     await prisma.child.deleteMany({ where: { familyId: family.id } });
