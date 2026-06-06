@@ -25,6 +25,12 @@ const REQUIRED_KEYS = [
   "STORAGE_S3_ACCESS_KEY_ID",
   "STORAGE_S3_SECRET_ACCESS_KEY",
   "STORAGE_S3_SIGNED_URL_TTL",
+  // Phase 8 — compliance & hardening
+  "ACCOUNT_RETAIN_DAYS",
+  "DATA_EXPORT_TTL",
+  "INVOICE_LEGAL_RETAIN_DAYS",
+  "CONSENT_LEGAL_RETAIN_DAYS",
+  "COPPA_ENFORCE_CONSENT",
 ];
 
 describe(".env.example completeness", () => {

@@ -15,6 +15,8 @@ export const ErrorCode = {
   WEBHOOK_SIGNATURE_INVALID: "WEBHOOK_SIGNATURE_INVALID",
   AMOUNT_MISMATCH: "AMOUNT_MISMATCH",
   INTERNAL_ERROR: "INTERNAL_ERROR",
+  // Phase 8 — Compliance
+  EXPORT_EXPIRED: "EXPORT_EXPIRED",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
@@ -89,6 +91,14 @@ export class RestoreWindowExpiredError extends AppError {
   constructor(message = "Restore window has expired") {
     super(410, ErrorCode.RESTORE_WINDOW_EXPIRED, message);
     this.name = "RestoreWindowExpiredError";
+  }
+}
+
+/** A data export reference was used after it expired (Phase 8, FR-003, 410). */
+export class ExportExpiredError extends AppError {
+  constructor(message = "This export has expired; request a new one") {
+    super(410, ErrorCode.EXPORT_EXPIRED, message);
+    this.name = "ExportExpiredError";
   }
 }
 

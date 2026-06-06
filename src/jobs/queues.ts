@@ -14,6 +14,8 @@ export const QUEUE_NAMES = {
   remindersSweep: "reminders-sweep",
   childPurge: "child-purge",
   subscriptionPurge: "subscription-purge",
+  familyPurge: "family-purge",
+  dataExport: "data-export",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -58,6 +60,8 @@ export const notificationsQueue = (): Queue => getQueue(QUEUE_NAMES.notification
 export const remindersSweepQueue = (): Queue => getQueue(QUEUE_NAMES.remindersSweep);
 export const childPurgeQueue = (): Queue => getQueue(QUEUE_NAMES.childPurge);
 export const subscriptionPurgeQueue = (): Queue => getQueue(QUEUE_NAMES.subscriptionPurge);
+export const familyPurgeQueue = (): Queue => getQueue(QUEUE_NAMES.familyPurge);
+export const dataExportQueue = (): Queue => getQueue(QUEUE_NAMES.dataExport);
 
 /** All instantiated queues (for graceful shutdown). */
 export function instantiatedQueues(): Queue[] {
@@ -85,4 +89,10 @@ export interface SweepJobData {
 /** The locked session event is carried verbatim; validated at the worker boundary. */
 export interface SessionEventJobData {
   event: unknown;
+}
+
+/** Phase 8 data-export assembly job (contracts/job-payloads.md §2). */
+export interface DataExportJobData {
+  exportId: string;
+  familyId: string;
 }

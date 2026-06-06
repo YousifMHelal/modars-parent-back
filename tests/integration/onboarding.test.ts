@@ -40,6 +40,9 @@ async function cleanup() {
   await prisma.emailVerificationToken.deleteMany({
     where: { parent: { familyId: { in: familyIds } } },
   });
+  // Phase 8: registration now writes consent records (FK Restrict → Parent/Family);
+  // clear them before deleting parents/families.
+  await prisma.consentRecord.deleteMany({ where: { familyId: { in: familyIds } } });
   await prisma.parent.deleteMany({ where: { familyId: { in: familyIds } } });
   await prisma.family.deleteMany({ where: { id: { in: familyIds } } });
 }

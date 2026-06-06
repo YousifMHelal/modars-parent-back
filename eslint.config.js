@@ -31,8 +31,15 @@ export default tseslint.config(
   {
     // Services are the only data-access layer; db/** and the lifecycle bootstraps
     // (server.ts web process, worker.ts job process) are also permitted to import the
-    // Prisma client directly (connect/disconnect).
-    files: ["**/*.service.ts", "src/db/**/*.ts", "src/server.ts", "src/worker.ts"],
+    // Prisma client directly (connect/disconnect). lib/consent.ts is the single
+    // service-layer consent data-access path (the only consent-write point, FR-006).
+    files: [
+      "**/*.service.ts",
+      "src/db/**/*.ts",
+      "src/lib/consent.ts",
+      "src/server.ts",
+      "src/worker.ts",
+    ],
     rules: {
       "no-restricted-imports": "off",
     },

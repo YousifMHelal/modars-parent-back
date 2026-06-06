@@ -58,3 +58,32 @@ export const invitationIdParamSchema = z.object({
 export const revokeSchema = {
   params: invitationIdParamSchema,
 };
+
+// ── Phase 8: account deletion ─────────────────────────────────────────────────
+
+export const deleteConfirmSchema = {
+  body: z.object({
+    // Explicit confirmation guard for an irreversible-after-window action (FR-008).
+    confirm: z.literal(true),
+    reason: z.string().max(500).optional(),
+  }),
+};
+
+export type DeleteConfirmInput = z.infer<typeof deleteConfirmSchema.body>;
+
+// ── Phase 8: data export ──────────────────────────────────────────────────────
+
+export const exportIdParamSchema = {
+  params: z.object({ id: z.string().min(1) }),
+};
+
+// ── Phase 8: consent history ──────────────────────────────────────────────────
+
+export const consentQuerySchema = {
+  query: z.object({
+    type: z.enum(["TERMS", "PRIVACY", "COPPA", "MARKETING"]).optional(),
+    childId: z.string().min(1).optional(),
+  }),
+};
+
+export type ConsentQueryInput = z.infer<typeof consentQuerySchema.query>;

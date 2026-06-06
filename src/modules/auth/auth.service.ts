@@ -60,6 +60,21 @@ export async function isSessionValid(sessionId: string): Promise<boolean> {
   return true;
 }
 
+/**
+ * Phase 8 (FR-014): a family in pending deletion (deletedAt != null) has its access
+ * revoked at the deletion *request*. No token may be minted or refreshed during the
+ * retain window, so a partially-purged family can never authenticate. Throws 403.
+ */
+async function assertFamilyNotPendingDeletion(familyId: string): Promise<void> {
+  const family = await prisma.family.findUnique({
+    where: { id: familyId },
+    select: { deletedAt: true },
+  });
+  if (family?.deletedAt) {
+    throw new AppError(403, ErrorCode.FORBIDDEN, "This account is scheduled for deletion");
+  }
+}
+
 // ── Session primitives ────────────────────────────────────────────────────────
 
 export async function issueSessionPair(params: {
@@ -117,6 +132,9 @@ export async function rotateRefresh(refreshToken: string): Promise<TokenPair> {
   const session = await prisma.authSession.findUnique({ where: { id: claims.sid } });
   if (!session || session.revokedAt) throw UNAUTHORIZED("Session revoked");
   if (session.expiresAt < new Date()) throw UNAUTHORIZED("Session expired");
+
+  // FR-014: refuse to refresh a token for a family pending deletion (access revoked).
+  await assertFamilyNotPendingDeletion(session.familyId);
 
   if (session.rotatedAt) {
     await revokeLineage(session.id);
@@ -309,6 +327,9 @@ export async function loginParent(params: {
   await clearLockout(emailKey);
   await clearLockout(accountKey);
 
+  // FR-014: a family pending deletion cannot mint new tokens (access revoked at request).
+  await assertFamilyNotPendingDeletion(parent.familyId);
+
   return issueSessionPair({
     principalId: parent.id,
     principalType: "parent",
@@ -414,6 +435,9 @@ export async function loginChild(params: {
 
   await clearLockout(usernameKey);
   await clearLockout(accountKey);
+
+  // FR-014: a child of a family pending deletion cannot mint new tokens either.
+  await assertFamilyNotPendingDeletion(child.familyId);
 
   return issueSessionPair({
     principalId: child.id,

@@ -5,6 +5,8 @@ import { createRemindersWorker } from "./reminders.worker.js";
 import { createSessionEventWorker } from "./sessionEvent.worker.js";
 import { createChildPurgeWorker } from "./childPurge.worker.js";
 import { createSubscriptionPurgeWorker } from "./subscriptionPurge.worker.js";
+import { createFamilyPurgeWorker } from "./familyPurge.worker.js";
+import { createDataExportWorker } from "./dataExport.worker.js";
 import { closeQueues } from "./queues.js";
 
 const logger = pino({ name: "jobs" });
@@ -22,6 +24,8 @@ const WORKER_FACTORIES: WorkerFactory[] = [
   createSessionEventWorker,
   createChildPurgeWorker,
   createSubscriptionPurgeWorker,
+  createFamilyPurgeWorker,
+  createDataExportWorker,
 ];
 
 let workers: Worker[] = [];

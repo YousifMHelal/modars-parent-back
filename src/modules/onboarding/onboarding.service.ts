@@ -1,5 +1,6 @@
 import prisma from "../../db/prisma.js";
 import { AppError, ErrorCode } from "../../lib/errors.js";
+import { recordConsent } from "../../lib/consent.js";
 import { registerParent, type TokenPair } from "../auth/auth.service.js";
 import { PLAN_KEY_MAP, type RegisterInput, type PlanSelectionInput } from "./onboarding.schema.js";
 
@@ -7,10 +8,14 @@ import { PLAN_KEY_MAP, type RegisterInput, type PlanSelectionInput } from "./onb
 // table. This service is the sole Prisma toucher for onboarding; price/state are
 // derived server-side and the subscription stays PENDING until Phase 5.
 
+// The consent policy versions accepted at registration. Bump when terms change; re-consent
+// appends a new record (lib/consent is append-only — FR-006).
+const CONSENT_VERSION = "1.0";
+
 // ── Step 1: register (reuses auth.registerParent) ─────────────────────────────
 
 export async function registerOnboarding(input: RegisterInput): Promise<TokenPair> {
-  return registerParent({
+  const tokens = await registerParent({
     familyName: `${input.fullName}'s Family`,
     fullName: input.fullName,
     email: input.email,
@@ -18,6 +23,27 @@ export async function registerOnboarding(input: RegisterInput): Promise<TokenPai
     dob: new Date(input.dateOfBirth),
     ...(input.country !== undefined ? { country: input.country } : {}),
   });
+
+  // Capture the parent-level TERMS/PRIVACY/COPPA consent accepted at signup (FR-005,
+  // research.md §5) — closes the "ConsentRecord never written" gap. Append-only via
+  // lib/consent. Best-effort: a consent write must not fail an otherwise-valid signup,
+  // and a re-register with the same email is impossible (auth rejects duplicates).
+  const parent = await prisma.parent.findUnique({
+    where: { email: input.email },
+    select: { id: true, familyId: true },
+  });
+  if (parent) {
+    for (const type of ["TERMS", "PRIVACY", "COPPA"] as const) {
+      await recordConsent(prisma, {
+        familyId: parent.familyId,
+        parentId: parent.id,
+        type,
+        version: CONSENT_VERSION,
+      });
+    }
+  }
+
+  return tokens;
 }
 
 // ── Step 2: plan selection → PENDING subscription ─────────────────────────────

@@ -5,12 +5,17 @@ import type {
   NotificationPrefsInput,
   InviteInput,
   AcceptInput,
+  ConsentQueryInput,
 } from "./settings.schema.js";
 
 // Thin controllers per contracts/settings.openapi.yaml. familyId + parentId come
 // from the verified principal; accept is public (token is the credential).
 
-export async function updateAccount(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function updateAccount(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
   try {
     const { familyId, id } = req.principal!;
     await service.updateAccount(familyId, id, req.body as AccountUpdateInput);
@@ -71,6 +76,92 @@ export async function revokeInvitation(
     const { id } = req.params as { id: string };
     await service.revokeInvitation(familyId, id);
     res.status(200).json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── Phase 8: account deletion ─────────────────────────────────────────────────
+
+export async function requestAccountDeletion(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { familyId } = req.principal!;
+    res.status(200).json(await service.requestAccountDeletion(familyId));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function cancelAccountDeletion(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { familyId } = req.principal!;
+    res.status(200).json(await service.cancelAccountDeletion(familyId));
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── Phase 8: data export ──────────────────────────────────────────────────────
+
+export async function requestDataExport(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { familyId, id } = req.principal!;
+    res.status(202).json(await service.requestDataExport(familyId, id));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function listDataExports(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { familyId } = req.principal!;
+    res.status(200).json(await service.listDataExports(familyId));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getDataExport(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { familyId } = req.principal!;
+    const { id } = req.params as { id: string };
+    res.status(200).json(await service.getDataExport(familyId, id));
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── Phase 8: consent history ──────────────────────────────────────────────────
+
+export async function getConsentHistory(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { familyId } = req.principal!;
+    const query: ConsentQueryInput = req.query;
+    res.status(200).json(await service.getConsentHistory(familyId, query));
   } catch (err) {
     next(err);
   }

@@ -4,8 +4,13 @@ import prisma from "../../db/prisma.js";
 import { sessionEventSchema, type SessionEvent } from "./sessionEvents.schema.js";
 import { applyHomeworkEvent, type HomeworkEventKind } from "../homework/homework.service.js";
 import { deriveFromSession } from "../progress/progress.service.js";
-import { buildAndDispatch, type NotificationIntent } from "../notifications/notifications.service.js";
+import {
+  buildAndDispatch,
+  type NotificationIntent,
+} from "../notifications/notifications.service.js";
 import { goalMetIntentsForChild } from "../rewards/rewards.service.js";
+import { hasValidConsent } from "../../lib/consent.js";
+import config from "../../config/index.js";
 
 const logger = pino({ name: "sessionEvents.service" });
 
@@ -17,7 +22,7 @@ const logger = pino({ name: "sessionEvents.service" });
 // the central dispatcher AFTER commit (cap-respecting).
 
 export interface ProcessResult {
-  status: "processed" | "duplicate" | "invalid";
+  status: "processed" | "duplicate" | "invalid" | "consent_missing";
   eventId?: string;
 }
 
@@ -33,6 +38,22 @@ export async function processSessionEvent(raw: unknown): Promise<ProcessResult> 
     return { status: "invalid" };
   }
   const event = parsed.data;
+
+  // FR-007: gate child-data collection on COPPA consent. Without a family-level COPPA
+  // record the dependent action is blocked OR flagged per policy (COPPA_ENFORCE_CONSENT).
+  // childId is null because COPPA is captured at the parent/family level at onboarding
+  // (data-model.md §D). Flagged events are still processed; blocked events are dropped (not
+  // retried) until consent exists.
+  const consented = await hasValidConsent(event.familyId, null, "COPPA");
+  if (!consented) {
+    logger.warn(
+      { eventId: event.eventId, familyId: event.familyId, enforced: config.COPPA_ENFORCE_CONSENT },
+      "session event without COPPA consent",
+    );
+    if (config.COPPA_ENFORCE_CONSENT) {
+      return { status: "consent_missing", eventId: event.eventId };
+    }
+  }
 
   let struggleIntents: NotificationIntent[] = [];
   let duplicate = false;

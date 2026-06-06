@@ -23,3 +23,13 @@ export function loginCardRef(childId: string): string {
 export function attachmentRef(messageId: string, filename: string): string {
   return `/files/attachments/${messageId}/${encodeURIComponent(filename)}`;
 }
+
+/** Private-bucket key for a data export bundle: `<familyId>/exports/<exportId>.json.gz`. */
+export function exportKey(familyId: string, exportId: string): string {
+  return `${familyId}/exports/${exportId}.json.gz`;
+}
+
+/** Stable app reference for a READY export, resolved through the family-scoped /files route. */
+export function exportRef(exportId: string): string {
+  return `/files/exports/${exportId}`;
+}

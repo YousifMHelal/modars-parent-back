@@ -4,6 +4,7 @@ import prisma from "../../db/prisma.js";
 import storage, { canSignRead } from "../../lib/storage.js";
 import { ForbiddenError, NotFoundError, StorageUnavailableError } from "../../lib/errors.js";
 import { loginCardKey, attachmentKey } from "../../lib/storageKeys.js";
+import { resolveExportStorageKey } from "../settings/settings.service.js";
 
 const logger = pino({ name: "files.service" });
 
@@ -50,7 +51,10 @@ export async function getLoginCard(familyId: string, childId: string): Promise<F
     throw new NotFoundError("Login card not found");
   }
   if (child.familyId !== familyId) {
-    logger.warn({ familyId, childId, ownerFamilyId: child.familyId }, "cross-family login-card access denied");
+    logger.warn(
+      { familyId, childId, ownerFamilyId: child.familyId },
+      "cross-family login-card access denied",
+    );
     throw new ForbiddenError("This object belongs to another family");
   }
   if (!child.loginCardUrl) {
@@ -79,7 +83,10 @@ export async function getAttachment(
     throw new NotFoundError("Attachment not found");
   }
   if (message.conversation.familyId !== familyId) {
-    logger.warn({ familyId, messageId, ownerFamilyId: message.conversation.familyId }, "cross-family attachment access denied");
+    logger.warn(
+      { familyId, messageId, ownerFamilyId: message.conversation.familyId },
+      "cross-family attachment access denied",
+    );
     throw new ForbiddenError("This object belongs to another family");
   }
   // The stored ref encodes the canonical filename; a guessed/mismatched name is a 404.
@@ -88,4 +95,14 @@ export async function getAttachment(
   }
 
   return resolve(attachmentKey(familyId, messageId, filename), "application/octet-stream");
+}
+
+/**
+ * Authorize and resolve a data-export bundle (Phase 8, FR-003/004). The settings service
+ * makes the family-scope/READY/expiry decision (foreign/unknown → 404, expired → 410); this
+ * resolves the resulting private key to a signed URL or stream.
+ */
+export async function getExport(familyId: string, exportId: string): Promise<FileResult> {
+  const key = await resolveExportStorageKey(familyId, exportId);
+  return resolve(key, "application/gzip");
 }

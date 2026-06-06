@@ -22,8 +22,33 @@ import filesRouter from "./modules/files/files.routes.js";
 export function createApp(): Application {
   const app = express();
 
-  // Security headers
-  app.use(helmet());
+  // In non-local (production) the API sits behind a TLS-terminating proxy. Trust it so
+  // req.secure / X-Forwarded-Proto are honored for the HTTPS redirect + HSTS below.
+  const nonLocal = config.NODE_ENV === "production";
+  if (nonLocal) {
+    app.set("trust proxy", 1);
+  }
+
+  // Security headers. helmet sets HSTS by default; make it explicit + long-lived in
+  // non-local so browsers pin HTTPS (FR-018). HSTS is meaningless over plain HTTP, so in
+  // local/dev we keep helmet's defaults without forcing the redirect.
+  app.use(
+    helmet(
+      nonLocal ? { hsts: { maxAge: 31_536_000, includeSubDomains: true, preload: true } } : {},
+    ),
+  );
+
+  // Enforce HTTPS in non-local: a plain-HTTP request (per X-Forwarded-Proto) is redirected
+  // to its https:// equivalent, so credentials/tokens never travel in cleartext (FR-018).
+  if (nonLocal) {
+    app.use((req, res, next) => {
+      if (req.secure || req.headers["x-forwarded-proto"] === "https") {
+        next();
+        return;
+      }
+      res.redirect(308, `https://${req.headers.host ?? ""}${req.originalUrl}`);
+    });
+  }
 
   // CORS
   app.use(

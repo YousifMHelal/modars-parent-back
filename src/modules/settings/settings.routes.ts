@@ -10,6 +10,9 @@ import {
   inviteSchema,
   acceptSchema,
   revokeSchema,
+  deleteConfirmSchema,
+  exportIdParamSchema,
+  consentQuerySchema,
 } from "./settings.schema.js";
 
 const router = Router();
@@ -58,6 +61,66 @@ router.post(
   publicWriteLimiter(20),
   validate(acceptSchema),
   controller.acceptCoParent,
+);
+
+// ── Phase 8: account deletion (owner-only family.delete; rate-limited) ─────────
+
+router.post(
+  "/settings/account/delete",
+  requireAuth,
+  requireRole("parent"),
+  requirePermission("family.delete"),
+  validate(deleteConfirmSchema),
+  publicWriteLimiter(10),
+  controller.requestAccountDeletion,
+);
+
+router.post(
+  "/settings/account/delete/cancel",
+  requireAuth,
+  requireRole("parent"),
+  requirePermission("family.delete"),
+  publicWriteLimiter(10),
+  controller.cancelAccountDeletion,
+);
+
+// ── Phase 8: data export (owner-only account.settings) ────────────────────────
+
+router.post(
+  "/settings/account/export",
+  requireAuth,
+  requireRole("parent"),
+  requirePermission("account.settings"),
+  publicWriteLimiter(10),
+  controller.requestDataExport,
+);
+
+router.get(
+  "/settings/account/export",
+  requireAuth,
+  requireRole("parent"),
+  requirePermission("account.settings"),
+  controller.listDataExports,
+);
+
+router.get(
+  "/settings/account/export/:id",
+  requireAuth,
+  requireRole("parent"),
+  requirePermission("account.settings"),
+  validate(exportIdParamSchema),
+  controller.getDataExport,
+);
+
+// ── Phase 8: consent history (owner-only account.settings) ────────────────────
+
+router.get(
+  "/settings/consent",
+  requireAuth,
+  requireRole("parent"),
+  requirePermission("account.settings"),
+  validate(consentQuerySchema),
+  controller.getConsentHistory,
 );
 
 export default router;

@@ -4,6 +4,7 @@ import {
   remindersSweepQueue,
   childPurgeQueue,
   subscriptionPurgeQueue,
+  familyPurgeQueue,
 } from "./queues.js";
 
 const logger = pino({ name: "scheduler" });
@@ -28,6 +29,11 @@ export async function registerRepeatableJobs(): Promise<void> {
     "sweep",
     {},
     { repeat: { pattern: config.PURGE_SWEEP_CRON }, jobId: "subscription-purge" },
+  );
+  await familyPurgeQueue().add(
+    "sweep",
+    {},
+    { repeat: { pattern: config.PURGE_SWEEP_CRON }, jobId: "family-purge" },
   );
 
   logger.info(

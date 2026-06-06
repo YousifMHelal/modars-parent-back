@@ -25,11 +25,25 @@ export async function getLoginCard(req: Request, res: Response, next: NextFuncti
   }
 }
 
-export async function getAttachment(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getAttachment(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
   try {
     const { familyId } = req.principal!;
     const { messageId, filename } = req.params as { messageId: string; filename: string };
     respond(res, await service.getAttachment(familyId, messageId, filename));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getExport(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { familyId } = req.principal!;
+    const { exportId } = req.params as { exportId: string };
+    respond(res, await service.getExport(familyId, exportId));
   } catch (err) {
     next(err);
   }

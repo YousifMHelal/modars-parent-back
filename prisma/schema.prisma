@@ -182,6 +182,15 @@ enum PushPlatform {
   APNS
 }
 
+// ── Phase 8: Compliance & hardening enums (data-model.md §B) ──────────────────
+
+enum DataExportStatus {
+  PENDING
+  READY
+  EXPIRED
+  FAILED
+}
+
 // ── Models ────────────────────────────────────────────────────────────────────
 
 model Family {
@@ -189,6 +198,13 @@ model Family {
   name      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Phase 8 (additive): account-deletion retain-then-purge. Mirrors the Child
+  // soft-delete convention. Both null = active; both set = pending deletion.
+  // The family-purge sweep selects deletedAt != null AND purgeAfter <= now
+  // (data-model.md §A, FR-008/011).
+  deletedAt  DateTime?
+  purgeAfter DateTime?
 
   parents       Parent[]
   children      Child[]
@@ -207,6 +223,7 @@ model Family {
   paymentIntents PaymentIntent[]
   paymentMethods PaymentMethod[]
   pushTokens     PushToken[]
+  dataExports    DataExport[]
 }
 
 model Parent {
@@ -233,6 +250,7 @@ model Parent {
   oauthAccounts            OAuthAccount[]
   emailVerificationTokens  EmailVerificationToken[]
   coParentInvitations      CoParentInvitation[]
+  dataExports              DataExport[]
 
   @@index([familyId])
 }
@@ -679,6 +697,29 @@ model ConsentRecord {
   child  Child?  @relation(fields: [childId], references: [id], onDelete: Restrict)
 
   @@index([familyId])
+}
+
+// ── Phase 8: Data export (data-model.md §B) ───────────────────────────────────
+
+model DataExport {
+  id                  String           @id @default(cuid())
+  familyId            String
+  requestedByParentId String
+  status              DataExportStatus @default(PENDING)
+  // Private object key `${familyId}/exports/${id}.json.gz`; null until READY.
+  storageKey          String?
+  requestedAt         DateTime         @default(now())
+  readyAt             DateTime?
+  expiresAt           DateTime?
+  error               String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  family            Family @relation(fields: [familyId], references: [id], onDelete: Restrict)
+  requestedByParent Parent @relation(fields: [requestedByParentId], references: [id], onDelete: Restrict)
+
+  @@index([familyId])
+  @@index([status, expiresAt])
 }
 
 // ── Phase 2: Auth models ──────────────────────────────────────────────────────

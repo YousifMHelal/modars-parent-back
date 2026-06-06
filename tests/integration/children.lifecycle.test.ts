@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, afterEach } from "vitest";
 import request from "supertest";
 import type { Application } from "express";
 import { createApp } from "../../src/app.js";

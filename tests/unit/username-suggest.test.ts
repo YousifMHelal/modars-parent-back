@@ -24,7 +24,7 @@ describe("suggestUsername", () => {
 describe("alternatives", () => {
   it("yields at least 3 available, valid candidates", async () => {
     const taken = new Set(["john_doe1"]);
-    const isTaken = async (c: string) => taken.has(c);
+    const isTaken = (c: string) => Promise.resolve(taken.has(c));
     const result = await alternatives("john_doe", isTaken, 3);
 
     expect(result.length).toBeGreaterThanOrEqual(3);
@@ -37,7 +37,7 @@ describe("alternatives", () => {
   });
 
   it("keeps every candidate within the username format", async () => {
-    const isTaken = async () => false;
+    const isTaken = () => Promise.resolve(false);
     const result = await alternatives("kid", isTaken, 5);
     expect(result.length).toBeGreaterThanOrEqual(5);
     for (const c of result) expect(isValidUsername(c)).toBe(true);

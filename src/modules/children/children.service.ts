@@ -9,7 +9,12 @@ import {
   NotFoundError,
 } from "../../lib/errors.js";
 import { assertChildInFamily } from "../../lib/familyScope.js";
-import { normalizeUsername, suggestUsername, alternatives, isValidUsername } from "../../lib/username.js";
+import {
+  normalizeUsername,
+  suggestUsername,
+  alternatives,
+  isValidUsername,
+} from "../../lib/username.js";
 import { updateChildCredentials, revokeAllForChild } from "../auth/auth.service.js";
 import { renderLoginCard } from "../../lib/loginCard.js";
 import storage from "../../lib/storage.js";
@@ -284,8 +289,15 @@ export async function purgeDueSoftDeleted(now: Date = new Date()): Promise<strin
   return purged;
 }
 
-/** Remove a child's dependent rows before the hard delete (FK onDelete: Restrict). */
-async function hardDeleteChildDependents(tx: Prisma.TransactionClient, childId: string): Promise<void> {
+/**
+ * Remove a child's dependent rows before the hard delete (FK onDelete: Restrict).
+ * Exported so the Phase 8 family-purge sweep composes the exact same FK-safe ordering
+ * per child (research.md §2) rather than duplicating it.
+ */
+export async function hardDeleteChildDependents(
+  tx: Prisma.TransactionClient,
+  childId: string,
+): Promise<void> {
   // Order matters: TopicProgress hangs off SubjectProgress.
   const subjectProgress = await tx.subjectProgress.findMany({
     where: { childId },
