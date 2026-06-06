@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { ReminderConfig } from "@prisma/client";
+import type { ReminderConfig } from "../../src/generated/prisma/client.js";
 import { REMINDER_CATALOG, mergeFamilyReminderConfigs } from "../../src/lib/reminders.js";
 
 type Row = Pick<ReminderConfig, "type" | "enabled" | "recipient" | "settings">;

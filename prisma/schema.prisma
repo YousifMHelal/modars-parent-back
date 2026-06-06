@@ -1,10 +1,11 @@
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 generator client {
-  provider = "prisma-client-js"
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
 }
 
 // ── Enums ─────────────────────────────────────────────────────────────────────
@@ -127,6 +128,13 @@ enum ConsentType {
   MARKETING
 }
 
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
 // ── Models ────────────────────────────────────────────────────────────────────
 
 model Family {
@@ -148,6 +156,7 @@ model Family {
   conversations Conversation[]
   consentRecords ConsentRecord[]
   authSessions  AuthSession[]
+  coParentInvitations CoParentInvitation[]
 }
 
 model Parent {
@@ -162,6 +171,9 @@ model Parent {
   dob           DateTime?
   passwordHash    String?
   emailVerifiedAt DateTime?
+  notifyPush      Boolean    @default(true)
+  notifyEmail     Boolean    @default(true)
+  notifyWhatsapp  Boolean    @default(false)
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
@@ -170,6 +182,7 @@ model Parent {
   authSessions             AuthSession[]
   oauthAccounts            OAuthAccount[]
   emailVerificationTokens  EmailVerificationToken[]
+  coParentInvitations      CoParentInvitation[]
 
   @@index([familyId])
 }
@@ -213,6 +226,9 @@ model Child {
   bedtimeCutoff       String?
   allowedDays         String[]
   blockedSubjects     String[]
+
+  // Login-card image (best-effort backfill after create, FR-011; null until generated)
+  loginCardUrl        String?
 
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
@@ -543,4 +559,26 @@ model EmailVerificationToken {
   parent Parent @relation(fields: [parentId], references: [id], onDelete: Cascade)
 
   @@index([parentId])
+}
+
+// ── Phase 4: Co-parent invitations ────────────────────────────────────────────
+
+model CoParentInvitation {
+  id          String           @id @default(cuid())
+  familyId    String
+  invitedById String
+  email       String
+  tokenHash   String
+  status      InvitationStatus @default(PENDING)
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  family    Family @relation(fields: [familyId], references: [id], onDelete: Restrict)
+  invitedBy Parent @relation(fields: [invitedById], references: [id], onDelete: Restrict)
+
+  @@index([familyId])
+  @@index([tokenHash])
 }

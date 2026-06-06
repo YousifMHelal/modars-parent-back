@@ -5,7 +5,7 @@ import type {
   Session as SessionModel,
   SubjectProgress as SubjectProgressModel,
   TopicProgress,
-} from "@prisma/client";
+} from "../../generated/prisma/client.js";
 import prisma from "../../db/prisma.js";
 import { NotFoundError } from "../../lib/errors.js";
 import {
@@ -232,6 +232,18 @@ export async function listChildren(
     orderBy: { createdAt: "asc" },
   });
   return buildOverviews(children, now);
+}
+
+/**
+ * Maps a single Child row into the Phase 3 ChildListItem shape so write endpoints
+ * (e.g. POST /children) can return a payload the FE children-list cache slots in.
+ */
+export async function mapChildToListItem(
+  child: Child,
+  now: Date = new Date(),
+): Promise<ChildListItem> {
+  const [item] = await buildOverviews([child], now);
+  return item!;
 }
 
 // ── US3: Child profile (§C) ───────────────────────────────────────────────────
@@ -473,11 +485,10 @@ export async function getSettings(familyId: string, parentId: string): Promise<S
     language: "en",
   };
 
-  // Notification-pref columns arrive in Phase 4; documented defaults until then.
   const notificationPrefs: SettingsPayload["notificationPrefs"] = {
-    push: true,
-    email: true,
-    whatsapp: false,
+    push: parent.notifyPush,
+    email: parent.notifyEmail,
+    whatsapp: parent.notifyWhatsapp,
   };
 
   if (!subscription || !subscription.plan) {

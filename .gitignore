@@ -3,6 +3,7 @@ dist/
 .env
 .env.local
 coverage/
+src/generated/
 *.log
 .DS_Store
 Thumbs.db

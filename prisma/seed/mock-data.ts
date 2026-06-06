@@ -11,7 +11,7 @@ import {
   ReminderRecipient,
   NotificationRecipient,
   Trend,
-} from "@prisma/client";
+} from "../../src/generated/prisma/client.js";
 import { hoursAgo, daysAgo, daysFromNow } from "./helpers.js";
 
 // ── Family & Parent ───────────────────────────────────────────────────────────

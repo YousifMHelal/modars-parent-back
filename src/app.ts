@@ -10,6 +10,9 @@ import { configurePassport, passport } from "./lib/oauth.js";
 import healthRouter from "./modules/health/health.routes.js";
 import authRouter from "./modules/auth/auth.routes.js";
 import dashboardRouter from "./modules/dashboard/dashboard.routes.js";
+import onboardingRouter from "./modules/onboarding/onboarding.routes.js";
+import childrenRouter from "./modules/children/children.routes.js";
+import settingsRouter from "./modules/settings/settings.routes.js";
 
 export function createApp(): Application {
   const app = express();
@@ -43,6 +46,9 @@ export function createApp(): Application {
   app.use(healthRouter);
   app.use(authRouter);
   app.use(dashboardRouter);
+  app.use(onboardingRouter);
+  app.use(childrenRouter);
+  app.use(settingsRouter);
 
   // 404 + centralized error handler (must be last)
   app.use(notFound);

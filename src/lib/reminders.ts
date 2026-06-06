@@ -1,4 +1,4 @@
-import type { ReminderConfig, ReminderRecipient, ReminderType } from "@prisma/client";
+import type { ReminderConfig, ReminderRecipient, ReminderType } from "../generated/prisma/client.js";
 
 // ── Reminder catalog (Phase 3, data-model.md §D / research.md §5) ──────────────
 //

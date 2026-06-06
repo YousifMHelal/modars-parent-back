@@ -1,13 +1,62 @@
 import { describe, it, expect } from "vitest";
-import { Prisma } from "@prisma/client";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 /**
  * Structural audit: every primary family-owned model exposes a non-null familyId,
  * Parent and Child are distinct entities with no shared identity column,
  * Child has no email, and usernameNormalized is uniquely constrained.
+ *
+ * Prisma v7 removed the runtime `Prisma.dmmf` accessor, so this audit parses
+ * `schema.prisma` directly instead of introspecting the generated client.
  */
+
+const schemaPath = fileURLToPath(new URL("../../prisma/schema.prisma", import.meta.url));
+const schema = readFileSync(schemaPath, "utf8");
+
+interface FieldInfo {
+  name: string;
+  isRequired: boolean;
+  isUnique: boolean;
+  isId: boolean;
+}
+
+function parseModel(name: string): { fields: FieldInfo[]; uniqueIndexes: string[][] } | null {
+  const match = schema.match(new RegExp(`model\\s+${name}\\s*\\{([\\s\\S]*?)\\n\\}`));
+  if (!match) return null;
+  const body = match[1]!;
+  const fields: FieldInfo[] = [];
+  const uniqueIndexes: string[][] = [];
+
+  for (const raw of body.split("\n")) {
+    const line = raw.trim();
+    if (!line || line.startsWith("//")) continue;
+
+    if (line.startsWith("@@unique")) {
+      const inner = line.match(/@@unique\(\[([^\]]+)\]/);
+      if (inner) uniqueIndexes.push(inner[1]!.split(",").map((s) => s.trim()));
+      continue;
+    }
+    if (line.startsWith("@@")) continue;
+
+    const fieldMatch = line.match(/^(\w+)\s+([\w.]+)(\??|\[\])?/);
+    if (!fieldMatch) continue;
+    const fieldName = fieldMatch[1]!;
+    const optionalMarker = fieldMatch[3] ?? "";
+
+    fields.push({
+      name: fieldName,
+      isRequired: optionalMarker !== "?" && optionalMarker !== "[]",
+      isUnique: /@unique\b/.test(line),
+      isId: /@id\b/.test(line),
+    });
+  }
+
+  return { fields, uniqueIndexes };
+}
+
 describe("family-scope audit", () => {
-  it("every primary family-owned model has a familyId field in its DMMF", () => {
+  it("every primary family-owned model has a non-null familyId field", () => {
     const familyOwnedModels = [
       "Parent",
       "Child",
@@ -20,11 +69,12 @@ describe("family-scope audit", () => {
       "Reward",
       "Conversation",
       "ConsentRecord",
+      "CoParentInvitation",
     ];
 
     for (const modelName of familyOwnedModels) {
-      const model = Prisma.dmmf.datamodel.models.find((m) => m.name === modelName);
-      expect(model, `Model ${modelName} not found in DMMF`).toBeDefined();
+      const model = parseModel(modelName);
+      expect(model, `Model ${modelName} not found in schema`).not.toBeNull();
 
       const familyIdField = model!.fields.find((f) => f.name === "familyId");
       expect(familyIdField, `${modelName} is missing familyId field`).toBeDefined();
@@ -33,11 +83,11 @@ describe("family-scope audit", () => {
   });
 
   it("Parent and Child are distinct models with no shared identity column", () => {
-    const parentModel = Prisma.dmmf.datamodel.models.find((m) => m.name === "Parent");
-    const childModel = Prisma.dmmf.datamodel.models.find((m) => m.name === "Child");
+    const parentModel = parseModel("Parent");
+    const childModel = parseModel("Child");
 
-    expect(parentModel).toBeDefined();
-    expect(childModel).toBeDefined();
+    expect(parentModel).not.toBeNull();
+    expect(childModel).not.toBeNull();
 
     // Parent is email-based
     expect(parentModel!.fields.find((f) => f.name === "email")).toBeDefined();
@@ -51,17 +101,17 @@ describe("family-scope audit", () => {
   });
 
   it("Child.usernameNormalized is uniquely constrained", () => {
-    const childModel = Prisma.dmmf.datamodel.models.find((m) => m.name === "Child");
-    expect(childModel).toBeDefined();
+    const childModel = parseModel("Child");
+    expect(childModel).not.toBeNull();
 
     const usernameNormalized = childModel!.fields.find((f) => f.name === "usernameNormalized");
     expect(usernameNormalized, "usernameNormalized field missing").toBeDefined();
     expect(usernameNormalized!.isUnique, "usernameNormalized must be @unique").toBe(true);
   });
 
-  it("Subscription has a familyId field (one subscription per family)", () => {
-    const model = Prisma.dmmf.datamodel.models.find((m) => m.name === "Subscription");
-    expect(model).toBeDefined();
+  it("Subscription has a unique, non-null familyId (one subscription per family)", () => {
+    const model = parseModel("Subscription");
+    expect(model).not.toBeNull();
 
     const familyIdField = model!.fields.find((f) => f.name === "familyId");
     expect(familyIdField).toBeDefined();

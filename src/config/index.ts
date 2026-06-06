@@ -42,6 +42,10 @@ const configSchema = z.object({
     .default("false")
     .transform((v) => v === "true"),
 
+  // Object storage (login-card images) — local-filesystem dev stub now, R2/S3 in Phase 7
+  STORAGE_DIR: z.string().default("./storage"),
+  STORAGE_PUBLIC_URL: z.string().default("http://localhost:4000/storage"),
+
   // Mailer
   MAILER_TRANSPORT: z.enum(["stub", "smtp"]).default("stub"),
   MAILER_FROM: z.string().email().default("noreply@example.com"),

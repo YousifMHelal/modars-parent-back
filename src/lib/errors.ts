@@ -4,6 +4,9 @@ export const ErrorCode = {
   NOT_FOUND: "NOT_FOUND",
   UNAUTHORIZED: "UNAUTHORIZED",
   FORBIDDEN: "FORBIDDEN",
+  CONFLICT: "CONFLICT",
+  PLAN_LIMIT_REACHED: "PLAN_LIMIT_REACHED",
+  RESTORE_WINDOW_EXPIRED: "RESTORE_WINDOW_EXPIRED",
   INTERNAL_ERROR: "INTERNAL_ERROR",
 } as const;
 
@@ -39,5 +42,29 @@ export class RateLimitedError extends AppError {
   constructor(message = "Too many requests, please try again later.") {
     super(429, ErrorCode.RATE_LIMITED, message);
     this.name = "RateLimitedError";
+  }
+}
+
+/** Username already taken or invitee already a parent (data-model.md §5). */
+export class ConflictError extends AppError {
+  constructor(message = "Conflict") {
+    super(409, ErrorCode.CONFLICT, message);
+    this.name = "ConflictError";
+  }
+}
+
+/** Child create/restore would exceed the plan's child-slot limit (FR-012, 409). */
+export class PlanLimitReachedError extends AppError {
+  constructor(message = "Plan child limit reached") {
+    super(409, ErrorCode.PLAN_LIMIT_REACHED, message);
+    this.name = "PlanLimitReachedError";
+  }
+}
+
+/** Restore attempted after the 7-day soft-delete window (FR-017, 410). */
+export class RestoreWindowExpiredError extends AppError {
+  constructor(message = "Restore window has expired") {
+    super(410, ErrorCode.RESTORE_WINDOW_EXPIRED, message);
+    this.name = "RestoreWindowExpiredError";
   }
 }
