@@ -45,3 +45,47 @@ export async function deregisterPushToken(
     next(err);
   }
 }
+
+// ── In-app notification feed (the dashboard bell) ─────────────────────────────
+
+export async function listNotifications(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { familyId } = req.principal!;
+    res.status(200).json(await service.listNotifications(familyId));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function markNotificationRead(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { familyId } = req.principal!;
+    const { id } = req.params as { id: string };
+    await service.markNotificationRead(familyId, id);
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function markAllNotificationsRead(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { familyId } = req.principal!;
+    const updated = await service.markAllNotificationsRead(familyId);
+    res.status(200).json({ updated });
+  } catch (err) {
+    next(err);
+  }
+}

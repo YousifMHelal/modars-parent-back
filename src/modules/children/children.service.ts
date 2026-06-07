@@ -19,6 +19,7 @@ import { updateChildCredentials, revokeAllForChild } from "../auth/auth.service.
 import { renderLoginCard } from "../../lib/loginCard.js";
 import storage from "../../lib/storage.js";
 import { loginCardKey, loginCardRef } from "../../lib/storageKeys.js";
+import config from "../../config/index.js";
 import type { CreateChildInput, EditChildInput, CredentialsInput } from "./children.schema.js";
 
 const logger = pino({ name: "children.service" });
@@ -68,6 +69,7 @@ async function backfillLoginCard(child: Child): Promise<void> {
       displayName: child.displayName,
       username: child.username,
       credentialKind: child.pinHash ? "pin" : "password",
+      signinUrl: config.LOGIN_CARD_SIGNIN_URL,
     });
     // Phase 7: write under the family-namespaced PRIVATE key (the put signature is
     // unchanged — only the key value), and persist a stable app `/files/...` reference
@@ -185,6 +187,11 @@ export async function updateCredentials(
     ...(input.password !== undefined ? { password: input.password } : {}),
     ...(input.pin !== undefined ? { pin: input.pin } : {}),
   });
+
+  // The card prints the username and sign-in method, so a credential change makes the
+  // stored image stale — regenerate it (best-effort, never fails the credential update).
+  const updated = await prisma.child.findUnique({ where: { id: childId } });
+  if (updated) await backfillLoginCard(updated);
 }
 
 // ── Pause / reactivate (FR-015) ───────────────────────────────────────────────

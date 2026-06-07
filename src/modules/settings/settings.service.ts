@@ -11,7 +11,7 @@ import {
   NotFoundError,
   ExportExpiredError,
 } from "../../lib/errors.js";
-import { hashSecret } from "../../lib/hashing.js";
+import { hashSecret, verifySecret } from "../../lib/hashing.js";
 import * as mailer from "../../lib/mailer.js";
 import storage from "../../lib/storage.js";
 import { exportKey, exportRef } from "../../lib/storageKeys.js";
@@ -19,7 +19,12 @@ import { dataExportQueue } from "../../jobs/queues.js";
 import type { ConsentQueryInput } from "./settings.schema.js";
 import { hardDeleteChildDependents } from "../children/children.service.js";
 import { issueSessionPair, type TokenPair } from "../auth/auth.service.js";
-import type { AccountUpdateInput, NotificationPrefsInput, AcceptInput } from "./settings.schema.js";
+import type {
+  AccountUpdateInput,
+  NotificationPrefsInput,
+  AcceptInput,
+  ChangePasswordInput,
+} from "./settings.schema.js";
 
 const logger = pino({ name: "settings.service" });
 
@@ -42,16 +47,63 @@ export async function updateAccount(
   parentId: string,
   input: AccountUpdateInput,
 ): Promise<void> {
+  // Email is the login identity (unique across all parents). Reject a change to an
+  // address already taken by a *different* parent before we attempt the write, so the
+  // caller gets a clean 409 rather than a Prisma unique-constraint surprise (FR-026).
+  if (input.email !== undefined) {
+    const existing = await prisma.parent.findUnique({
+      where: { email: input.email },
+      select: { id: true },
+    });
+    if (existing && existing.id !== parentId) {
+      throw new ConflictError("This email is already registered to a parent");
+    }
+  }
+
   const result = await prisma.parent.updateMany({
     where: { id: parentId, familyId },
     data: {
       ...(input.fullName !== undefined ? { fullName: input.fullName } : {}),
+      ...(input.email !== undefined ? { email: input.email } : {}),
       ...(input.phoneCountry !== undefined ? { phoneCountry: input.phoneCountry } : {}),
       ...(input.phoneNumber !== undefined ? { phoneNumber: input.phoneNumber } : {}),
       ...(input.country !== undefined ? { country: input.country } : {}),
+      ...(input.language !== undefined ? { language: input.language } : {}),
     },
   });
   if (result.count === 0) throw new NotFoundError("Account not found");
+}
+
+/**
+ * Change the calling parent's own password (owner-only). Guarded by the current password:
+ * a wrong current password is a 401 (UNAUTHORIZED), indistinguishable from a real auth
+ * failure. On success the new password is argon2-hashed and stored. Family-scoped so a
+ * caller can only ever rotate their own credential.
+ */
+export async function changePassword(
+  familyId: string,
+  parentId: string,
+  input: ChangePasswordInput,
+): Promise<void> {
+  const parent = await prisma.parent.findFirst({
+    where: { id: parentId, familyId },
+    select: { passwordHash: true },
+  });
+  if (!parent) throw new NotFoundError("Account not found");
+
+  // A passwordless (OAuth-only) account cannot verify a current password.
+  if (!parent.passwordHash) {
+    throw new AppError(409, ErrorCode.CONFLICT, "This account has no password set");
+  }
+
+  const ok = await verifySecret(parent.passwordHash, input.currentPassword);
+  if (!ok) throw new AppError(401, ErrorCode.UNAUTHORIZED, "Current password is incorrect");
+
+  const passwordHash = await hashSecret(input.newPassword);
+  await prisma.parent.update({
+    where: { id: parentId },
+    data: { passwordHash },
+  });
 }
 
 export async function updateNotificationPrefs(

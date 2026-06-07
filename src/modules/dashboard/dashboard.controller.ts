@@ -49,6 +49,25 @@ export async function getReminders(req: Request, res: Response, next: NextFuncti
   }
 }
 
+export async function updateReminder(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { familyId } = req.principal!;
+    const { id } = req.params as { id: string };
+    const { enabled, settings } = req.body as {
+      enabled?: boolean;
+      settings?: Record<string, unknown>;
+    };
+    const reminders = await service.updateReminder(familyId, id, { enabled, settings });
+    res.status(200).json({ reminders });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function getSettings(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { familyId, id } = req.principal!;

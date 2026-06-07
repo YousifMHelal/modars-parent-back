@@ -9,6 +9,41 @@ export const childIdParamSchema = z.object({
 
 export type ChildIdParam = z.infer<typeof childIdParamSchema>;
 
+// Reminder toggle write: the :id path param is the catalog slug (e.g. "daily-study")
+// the Reminders screen renders; the body carries the new family-level enabled state.
+export const reminderIdParamSchema = z.object({
+  id: z.string().min(1),
+});
+
+export type ReminderIdParam = z.infer<typeof reminderIdParamSchema>;
+
+// A reminder write may flip the enabled state, change per-type settings (e.g. the
+// Daily Study time + days), or both. At least one field must be present.
+const reminderSettingsSchema = z
+  .object({
+    time: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "time must be HH:mm")
+      .optional(),
+    days: z
+      .array(z.enum(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]))
+      .optional(),
+    leadTimeHours: z.number().int().positive().optional(),
+    channel: z.enum(["email", "in-app", "whatsapp"]).optional(),
+  })
+  .strict();
+
+export const updateReminderBodySchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    settings: reminderSettingsSchema.optional(),
+  })
+  .refine((b) => b.enabled !== undefined || b.settings !== undefined, {
+    message: "provide enabled and/or settings",
+  });
+
+export type UpdateReminderBody = z.infer<typeof updateReminderBodySchema>;
+
 // ── Response types (match contracts/dashboard.openapi.yaml + the FE mock shapes) ─
 
 export interface LastSession {
@@ -157,6 +192,8 @@ export interface SettingsPayload {
     fullName: string;
     email: string;
     phone: string | null;
+    phoneCountry: string | null;
+    phoneNumber: string | null;
     country: string | null;
     language: string;
   };

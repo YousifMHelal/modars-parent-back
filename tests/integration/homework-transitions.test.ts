@@ -125,16 +125,18 @@ describe("homework transitions from session events", () => {
     expect(ledgerCount).toBe(1);
   });
 
-  it("server-authoritative: there is no client route that sets homework status (FR-017)", async () => {
-    // The homework module exposes no controller/routes — status is only ever set by the
-    // session-event pipeline and the deadline sweep. Assert the absence structurally.
-    const fs = await import("node:fs");
-    const path = await import("node:path");
-    const { fileURLToPath } = await import("node:url");
-    const here = path.dirname(fileURLToPath(import.meta.url));
-    const dir = path.resolve(here, "../../src/modules/homework");
-    const files = fs.readdirSync(dir);
-    expect(files).not.toContain("homework.controller.ts");
-    expect(files).not.toContain("homework.routes.ts");
+  it("server-authoritative: the create route does not let a client set homework status (FR-017)", async () => {
+    // Parents may CREATE homework (FR-014), but status is never client-settable — it is
+    // only set by the session-event pipeline, the deadline sweep, and the server-chosen
+    // initial value on create. Assert the create schema accepts no `status` field.
+    const { createHomeworkSchema } = await import("../../src/modules/homework/homework.schema.js");
+    const parsed = createHomeworkSchema.body.parse({
+      subject: "Mathematics",
+      topic: "Fractions",
+      deadline: "2999-01-01",
+      // A client attempting to set status must not have it honored.
+      status: "COMPLETED",
+    });
+    expect(parsed).not.toHaveProperty("status");
   });
 });

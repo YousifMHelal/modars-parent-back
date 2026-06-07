@@ -9,14 +9,26 @@ export const accountUpdateSchema = {
   body: z
     .object({
       fullName: z.string().min(1).max(200).optional(),
+      email: z.string().email().max(320).optional(),
       phoneCountry: z.string().max(10).optional(),
       phoneNumber: z.string().max(40).optional(),
       country: z.string().min(2).max(100).optional(),
+      language: z.enum(["en", "ar"]).optional(),
     })
     .refine((d) => Object.keys(d).length > 0, { message: "At least one field is required" }),
 };
 
 export type AccountUpdateInput = z.infer<typeof accountUpdateSchema.body>;
+
+// Phase 8: parent self-service password change (owner-only, guarded by current password).
+export const changePasswordSchema = {
+  body: z.object({
+    currentPassword: z.string().min(1).max(128),
+    newPassword: z.string().min(8).max(128),
+  }),
+};
+
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema.body>;
 
 export const notificationPrefsSchema = {
   body: z

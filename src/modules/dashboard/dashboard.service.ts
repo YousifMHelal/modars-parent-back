@@ -1,10 +1,11 @@
-import type {
-  Badge as BadgeModel,
-  Child,
-  Homework,
-  Session as SessionModel,
-  SubjectProgress as SubjectProgressModel,
-  TopicProgress,
+import {
+  Prisma,
+  type Badge as BadgeModel,
+  type Child,
+  type Homework,
+  type Session as SessionModel,
+  type SubjectProgress as SubjectProgressModel,
+  type TopicProgress,
 } from "../../generated/prisma/client.js";
 import prisma from "../../db/prisma.js";
 import { NotFoundError } from "../../lib/errors.js";
@@ -15,7 +16,11 @@ import {
   relativeDateTime,
   relativeTime,
 } from "../../lib/time.js";
-import { mergeFamilyReminderConfigs } from "../../lib/reminders.js";
+import {
+  mergeFamilyReminderConfigs,
+  reminderEntryForSlug,
+  recipientEnumForLabel,
+} from "../../lib/reminders.js";
 import type {
   Badge,
   ChildListItem,
@@ -442,9 +447,87 @@ export async function getChildProfile(
 export async function getReminderConfig(familyId: string): Promise<ReminderEntry[]> {
   const configs = await prisma.reminderConfig.findMany({
     where: { familyId },
-    select: { type: true, enabled: true, recipient: true, settings: true },
+    // Stable ordering so the family-level rollup always picks the SAME child's row
+    // as the representative settings (Postgres gives no order without ORDER BY, which
+    // otherwise made the displayed time/days appear to change across reloads/logins).
+    orderBy: { childId: "asc" },
+    select: { childId: true, type: true, enabled: true, recipient: true, settings: true },
   });
   return mergeFamilyReminderConfigs(configs);
+}
+
+interface ReminderUpdate {
+  enabled?: boolean | undefined;
+  settings?: Record<string, unknown> | undefined;
+}
+
+/**
+ * Persist a reminder change at the family level (US4 write). The screen shows one
+ * family-level row per type (enabled = OR across the family's children, settings from
+ * a representative row — see mergeFamilyReminderConfigs); writing the inverse here
+ * applies the change to every non-deleted child's ReminderConfig row for that type.
+ * `enabled` is set directly; `settings` is merged into each child's existing settings
+ * (so changing days doesn't wipe time). Children missing a row for the type get one
+ * created with the catalog's default recipient, so the change reliably persists for
+ * all 9 types. Returns the refreshed family-level list. A `slug` outside the catalog
+ * is a 404.
+ */
+export async function updateReminder(
+  familyId: string,
+  slug: string,
+  update: ReminderUpdate,
+): Promise<ReminderEntry[]> {
+  const entry = reminderEntryForSlug(slug);
+  if (!entry) {
+    throw new NotFoundError("Reminder not found");
+  }
+
+  const children = await prisma.child.findMany({
+    where: { familyId, deletedAt: null },
+    select: {
+      id: true,
+      reminderConfigs: {
+        where: { type: entry.type },
+        select: { settings: true },
+      },
+    },
+  });
+
+  const defaultRecipient = recipientEnumForLabel(entry.defaultRecipient);
+
+  await prisma.$transaction(
+    children.map((child) => {
+      // Merge settings over the child's existing settings so a partial update (e.g.
+      // just `days`) preserves the other keys (e.g. `time`).
+      const existing = (child.reminderConfigs[0]?.settings ?? {}) as Record<string, unknown>;
+      const mergedSettings: Prisma.InputJsonValue | undefined =
+        update.settings !== undefined
+          ? ({ ...existing, ...update.settings } as Prisma.InputJsonValue)
+          : undefined;
+
+      const updateData: Prisma.ReminderConfigUpdateInput = {
+        ...(update.enabled !== undefined ? { enabled: update.enabled } : {}),
+        ...(mergedSettings !== undefined ? { settings: mergedSettings } : {}),
+      };
+
+      const createData: Prisma.ReminderConfigUncheckedCreateInput = {
+        familyId,
+        childId: child.id,
+        type: entry.type,
+        enabled: update.enabled ?? false,
+        recipient: defaultRecipient,
+        ...(mergedSettings !== undefined ? { settings: mergedSettings } : {}),
+      };
+
+      return prisma.reminderConfig.upsert({
+        where: { childId_type: { childId: child.id, type: entry.type } },
+        update: updateData,
+        create: createData,
+      });
+    }),
+  );
+
+  return getReminderConfig(familyId);
 }
 
 // ── US5: Settings (§E) ────────────────────────────────────────────────────────
@@ -481,8 +564,10 @@ export async function getSettings(familyId: string, parentId: string): Promise<S
     fullName: parent.fullName,
     email: parent.email,
     phone,
+    phoneCountry: parent.phoneCountry,
+    phoneNumber: parent.phoneNumber,
     country: parent.country,
-    language: "en",
+    language: parent.language,
   };
 
   const notificationPrefs: SettingsPayload["notificationPrefs"] = {

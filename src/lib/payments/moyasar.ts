@@ -25,6 +25,8 @@ interface MoyasarConfig {
   secretKey: string;
   webhookSecret: string;
   apiBase?: string;
+  /** Where Moyasar's hosted invoice page returns the user after pay/cancel. */
+  returnUrl?: string;
 }
 
 /** Map Moyasar's event/payment status to our logical event type. */
@@ -47,33 +49,63 @@ export function createMoyasarProvider(cfg: MoyasarConfig): PaymentProvider {
     async createCharge(args: CreateChargeArgs): Promise<CreateChargeResult> {
       // Basic auth: the secret key as the username, empty password.
       const auth = Buffer.from(`${cfg.secretKey}:`).toString("base64");
-      const res = await fetch(`${apiBase}/payments`, {
+
+      // A saved-method token can be charged directly via the Payments API. Without a
+      // token we must collect the card on Moyasar's side: the Payments API requires a
+      // `source` we don't have, so we create a hosted Invoice instead, which returns a
+      // `url` to redirect the user to (where Moyasar collects the card / runs 3-DS).
+      if (args.methodRef) {
+        const res = await fetch(`${apiBase}/payments`, {
+          method: "POST",
+          headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            amount: args.amountMinor,
+            currency: args.currency,
+            description: args.description,
+            metadata: args.metadata,
+            source: { type: "token", token: args.methodRef },
+          }),
+        });
+        if (!res.ok) {
+          const detail = await res.text().catch(() => "");
+          throw new Error(`Moyasar createCharge failed (${res.status}): ${detail}`);
+        }
+        const body = (await res.json()) as {
+          id: string;
+          source?: { transaction_url?: string };
+        };
+        return {
+          providerRef: body.id,
+          ...(body.source?.transaction_url ? { redirectUrl: body.source.transaction_url } : {}),
+        };
+      }
+
+      // Hosted checkout via Invoice (no saved method). Moyasar requires SAR amounts to
+      // be multiples of 10 halalas; round up so the user is never undercharged.
+      const amount = Math.ceil(args.amountMinor / 10) * 10;
+      const res = await fetch(`${apiBase}/invoices`, {
         method: "POST",
-        headers: {
-          Authorization: `Basic ${auth}`,
-          "Content-Type": "application/json",
-        },
+        headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          amount: args.amountMinor,
+          amount,
           currency: args.currency,
           description: args.description,
           metadata: args.metadata,
-          ...(args.methodRef ? { source: { type: "token", token: args.methodRef } } : {}),
+          ...(cfg.returnUrl
+            ? { success_url: cfg.returnUrl, back_url: cfg.returnUrl }
+            : {}),
         }),
       });
 
       if (!res.ok) {
         const detail = await res.text().catch(() => "");
-        throw new Error(`Moyasar createCharge failed (${res.status}): ${detail}`);
+        throw new Error(`Moyasar createInvoice failed (${res.status}): ${detail}`);
       }
 
-      const body = (await res.json()) as {
-        id: string;
-        source?: { transaction_url?: string };
-      };
+      const body = (await res.json()) as { id: string; url?: string };
       return {
         providerRef: body.id,
-        ...(body.source?.transaction_url ? { redirectUrl: body.source.transaction_url } : {}),
+        ...(body.url ? { redirectUrl: body.url } : {}),
       };
     },
 

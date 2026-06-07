@@ -3,7 +3,11 @@ import { requireAuth } from "../../middleware/requireAuth.js";
 import { requireRole, requirePermission } from "../../middleware/requirePermission.js";
 import { validate } from "../../middleware/validate.js";
 import * as controller from "./dashboard.controller.js";
-import { childIdParamSchema } from "./dashboard.schema.js";
+import {
+  childIdParamSchema,
+  reminderIdParamSchema,
+  updateReminderBodySchema,
+} from "./dashboard.schema.js";
 
 const router = Router();
 
@@ -42,6 +46,17 @@ router.get(
   requireRole("parent"),
   requirePermission("dashboard.view"),
   controller.getReminders,
+);
+
+// Toggling a reminder is a notification-preference write — owner-only, like the
+// Settings notification prefs. Persists family-level (service fans out to children).
+router.patch(
+  "/dashboard/reminders/:id",
+  requireAuth,
+  requireRole("parent"),
+  requirePermission("account.settings"),
+  validate({ params: reminderIdParamSchema, body: updateReminderBodySchema }),
+  controller.updateReminder,
 );
 
 // Settings READ guards on dashboard.view (co-parent allowed); account.settings stays

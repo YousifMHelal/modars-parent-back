@@ -20,6 +20,7 @@ export interface WriteFixture {
   childId: string;
   childSessionId: string;
   familyBOwnerId: string;
+  familyBOwnerEmail: string;
   familyBChildId: string;
   planKey: "STARTER" | "FAMILY" | "FAMILY_PRO";
   subscriptionId: string;
@@ -167,12 +168,13 @@ export async function setupWriteFixture(
 
   // ── Family B ──
   const familyB = await prisma.family.create({ data: { name: "write-test-family-b" } });
+  const familyBOwnerEmail = `write.other.${uniq}@test.write`;
   const familyBOwner = await prisma.parent.create({
     data: {
       familyId: familyB.id,
       role: "OWNER",
       fullName: "Other Parent",
-      email: `write.other.${uniq}@test.write`,
+      email: familyBOwnerEmail,
       passwordHash: parentPasswordHash,
       dob: new Date("1985-01-01"),
     },
@@ -213,6 +215,7 @@ export async function setupWriteFixture(
     childId: child.id,
     childSessionId: childSession.id,
     familyBOwnerId: familyBOwner.id,
+    familyBOwnerEmail,
     familyBChildId: familyBChild.id,
     planKey,
     subscriptionId: subscriptionA.id,
@@ -287,6 +290,8 @@ export async function teardownWriteFixture(): Promise<void> {
   // before children. (Tests that seed Session rows for SESSIONS-goal derivation.)
   await prisma.reward.deleteMany({ where: { familyId: { in: familyIds } } });
   await prisma.session.deleteMany({ where: { familyId: { in: familyIds } } });
+  // Homework references family/child with onDelete: Restrict — clear before children.
+  await prisma.homework.deleteMany({ where: { familyId: { in: familyIds } } });
   await prisma.authSession.updateMany({
     where: { familyId: { in: familyIds } },
     data: { replacedById: null },

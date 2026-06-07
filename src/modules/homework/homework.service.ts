@@ -2,6 +2,7 @@ import pino from "pino";
 import { Prisma } from "../../generated/prisma/client.js";
 import type { Homework, HomeworkStatus } from "../../generated/prisma/client.js";
 import prisma from "../../db/prisma.js";
+import { assertChildInFamily } from "../../lib/familyScope.js";
 
 const logger = pino({ name: "homework.service" });
 
@@ -111,4 +112,44 @@ export async function sweepOverdueHomework(now: Date = new Date()): Promise<numb
     logger.info({ count: result.count }, "homework marked overdue");
   }
   return result.count;
+}
+
+// ── Parent-authored creation (FR-014) ─────────────────────────────────────────
+
+export interface CreateHomeworkInput {
+  subject: string;
+  topic: string;
+  /** ISO date (YYYY-MM-DD) or datetime; coerced to a Date deadline. */
+  deadline: string;
+}
+
+/**
+ * Create a homework item for a child the parent owns. assertChildInFamily rejects a
+ * foreign / missing / soft-deleted childId as a 404 before any write. New items always
+ * start PENDING — status is server-authoritative and only advances via session events or
+ * the overdue sweep (FR-017), never set by the client. A deadline already in the past is
+ * normalized to OVERDUE up front so the item is consistent before the next sweep.
+ */
+export async function createHomework(
+  familyId: string,
+  childId: string,
+  input: CreateHomeworkInput,
+): Promise<Homework> {
+  await assertChildInFamily(familyId, childId);
+
+  const deadline = new Date(input.deadline);
+  const status: HomeworkStatus = deadline.getTime() < Date.now() ? "OVERDUE" : "PENDING";
+
+  const item = await prisma.homework.create({
+    data: {
+      familyId,
+      childId,
+      subject: input.subject,
+      topic: input.topic,
+      deadline,
+      status,
+    },
+  });
+  logger.info({ homeworkId: item.id, childId, status }, "homework created");
+  return item;
 }

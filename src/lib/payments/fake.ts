@@ -31,13 +31,21 @@ export function signFakeBody(rawBody: Buffer | string, secret = FAKE_WEBHOOK_SEC
   return createHmac("sha256", secret).update(body).digest("hex");
 }
 
-export function createFakeProvider(secret = FAKE_WEBHOOK_SECRET): PaymentProvider {
+/** Default redirect base for the fake when no override is supplied. Non-resolvable by
+ * design — only used in offline tests that never load the page. Real dev runs pass a
+ * working URL (see config FAKE_CHECKOUT_REDIRECT_URL). */
+export const FAKE_CHECKOUT_BASE = "https://fake-provider.test/checkout";
+
+export function createFakeProvider(
+  secret = FAKE_WEBHOOK_SECRET,
+  checkoutBase = FAKE_CHECKOUT_BASE,
+): PaymentProvider {
   return {
     createCharge(args: CreateChargeArgs): Promise<CreateChargeResult> {
       const providerRef = fakeProviderRef(args.metadata.intentId);
       return Promise.resolve({
         providerRef,
-        redirectUrl: `https://fake-provider.test/checkout/${providerRef}`,
+        redirectUrl: `${checkoutBase}/${providerRef}`,
       });
     },
 

@@ -26,11 +26,17 @@ export function getPaymentProvider(): PaymentProvider {
   if (instance) return instance;
 
   if (shouldUseFake()) {
-    instance = createFakeProvider(config.PAYMENT_WEBHOOK_SECRET ?? FAKE_WEBHOOK_SECRET);
+    instance = createFakeProvider(
+      config.PAYMENT_WEBHOOK_SECRET ?? FAKE_WEBHOOK_SECRET,
+      config.FAKE_CHECKOUT_REDIRECT_URL,
+    );
   } else {
     instance = createMoyasarProvider({
       secretKey: config.PAYMENT_PROVIDER_SECRET_KEY ?? "",
       webhookSecret: config.PAYMENT_WEBHOOK_SECRET ?? "",
+      // Hosted invoice returns the user here after pay/cancel; the subscription is
+      // still activated by the verified webhook, not this redirect.
+      returnUrl: `${process.env["APP_URL"] ?? "http://localhost:5173"}/dashboard/settings`,
     });
   }
   return instance;

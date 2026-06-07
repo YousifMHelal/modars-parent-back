@@ -9,6 +9,7 @@ import type {
 } from "../../generated/prisma/client.js";
 import prisma from "../../db/prisma.js";
 import config from "../../config/index.js";
+import { NotFoundError } from "../../lib/errors.js";
 import { riyadhCapDay } from "../../lib/time.js";
 import { reminderPriorityRank } from "../../lib/reminders.js";
 import { notificationsQueue } from "../../jobs/queues.js";
@@ -295,4 +296,82 @@ export async function registerPushToken(
 /** Deregister a device token (idempotent; only within the caller's family). */
 export async function deregisterPushToken(familyId: string, token: string): Promise<void> {
   await prisma.pushToken.deleteMany({ where: { familyId, token } });
+}
+
+// ── In-app notification feed (the dashboard bell) ─────────────────────────────
+//
+// The parent bell reads PARENT-addressed notifications for the family, newest first.
+// Only delivered notices are shown (SUPPRESSED rows lost the daily-cap race and were
+// never meant to surface; PENDING/SENT/FAILED are all real deliveries to the feed).
+
+export interface NotificationView {
+  id: string;
+  title: string;
+  body: string | null;
+  source: Notification["source"];
+  createdAt: Date;
+  readAt: Date | null;
+}
+
+function toNotificationView(row: Notification): NotificationView {
+  return {
+    id: row.id,
+    title: row.title,
+    body: row.body,
+    source: row.source,
+    createdAt: row.createdAt,
+    readAt: row.readAt,
+  };
+}
+
+/**
+ * List the family's PARENT-addressed notifications, newest first (family-scoped). Excludes
+ * SUPPRESSED rows (cap-dropped, never surfaced). `unreadCount` drives the bell's badge.
+ */
+export async function listNotifications(
+  familyId: string,
+  limit = 50,
+): Promise<{ notifications: NotificationView[]; unreadCount: number }> {
+  const where = {
+    familyId,
+    recipient: "PARENT" as NotificationRecipient,
+    dispatchStatus: { not: "SUPPRESSED" as const },
+  };
+  const [rows, unreadCount] = await Promise.all([
+    prisma.notification.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    }),
+    prisma.notification.count({ where: { ...where, readAt: null } }),
+  ]);
+  return { notifications: rows.map(toNotificationView), unreadCount };
+}
+
+/**
+ * Mark one notification read (family-scoped, idempotent). A foreign/unknown id affects no
+ * rows — reported as not-found so the client can't probe other families' ids.
+ */
+export async function markNotificationRead(familyId: string, id: string): Promise<void> {
+  const result = await prisma.notification.updateMany({
+    where: { id, familyId, readAt: null },
+    data: { readAt: new Date() },
+  });
+  if (result.count === 0) {
+    // Either already read (no-op) or not ours/unknown. Distinguish so a genuine 404 surfaces.
+    const exists = await prisma.notification.findFirst({
+      where: { id, familyId },
+      select: { id: true },
+    });
+    if (!exists) throw new NotFoundError("Notification not found");
+  }
+}
+
+/** Mark every unread PARENT notification in the family as read. Returns the count updated. */
+export async function markAllNotificationsRead(familyId: string): Promise<number> {
+  const result = await prisma.notification.updateMany({
+    where: { familyId, recipient: "PARENT", readAt: null },
+    data: { readAt: new Date() },
+  });
+  return result.count;
 }

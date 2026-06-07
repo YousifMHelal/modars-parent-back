@@ -54,6 +54,37 @@ describe("mergeFamilyReminderConfigs", () => {
     expect(daily.settings).toEqual({ time: "17:00", days: ["Mon", "Tue"] });
   });
 
+  it("picks the lowest-childId row as representative regardless of input order", () => {
+    // Same type, two children with different settings, fed in both orders. The
+    // representative (and thus displayed settings) must be stable — this is the
+    // regression for time/days appearing to change across reloads/logins.
+    const childA = {
+      type: "DAILY_STUDY" as const,
+      enabled: true,
+      recipient: "CHILD" as const,
+      settings: { time: "08:00", days: ["Mon"] },
+      childId: "child-aaa",
+    };
+    const childB = {
+      type: "DAILY_STUDY" as const,
+      enabled: true,
+      recipient: "BOTH" as const,
+      settings: { time: "20:00", days: ["Sun"] },
+      childId: "child-bbb",
+    };
+
+    const forward = mergeFamilyReminderConfigs([childA, childB]).find(
+      (r) => r.id === "daily-study",
+    )!;
+    const reversed = mergeFamilyReminderConfigs([childB, childA]).find(
+      (r) => r.id === "daily-study",
+    )!;
+
+    expect(forward.settings).toEqual({ time: "08:00", days: ["Mon"] });
+    expect(reversed.settings).toEqual(forward.settings);
+    expect(reversed.recipient).toBe(forward.recipient);
+  });
+
   it("title-cases each recipient enum", () => {
     const rows: Row[] = [
       { type: "DAILY_STUDY", enabled: true, recipient: "CHILD", settings: null },

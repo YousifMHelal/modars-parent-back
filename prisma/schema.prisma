@@ -235,6 +235,7 @@ model Parent {
   phoneCountry  String?
   phoneNumber   String?
   country       String?
+  language      String     @default("en")
   dob           DateTime?
   passwordHash    String?
   emailVerifiedAt DateTime?

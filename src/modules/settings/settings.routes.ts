@@ -6,6 +6,7 @@ import { publicWriteLimiter } from "../../middleware/writeRateLimit.js";
 import * as controller from "./settings.controller.js";
 import {
   accountUpdateSchema,
+  changePasswordSchema,
   notificationPrefsSchema,
   inviteSchema,
   acceptSchema,
@@ -27,6 +28,17 @@ router.patch(
   requirePermission("account.settings"),
   validate(accountUpdateSchema),
   controller.updateAccount,
+);
+
+// Self-service password change: owner-only, guarded by the current password, rate-limited.
+router.patch(
+  "/settings/account/password",
+  requireAuth,
+  requireRole("parent"),
+  requirePermission("account.settings"),
+  validate(changePasswordSchema),
+  publicWriteLimiter(10),
+  controller.changePassword,
 );
 
 router.patch(

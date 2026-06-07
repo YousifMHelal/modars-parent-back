@@ -6,6 +6,7 @@ import type {
   InviteInput,
   AcceptInput,
   ConsentQueryInput,
+  ChangePasswordInput,
 } from "./settings.schema.js";
 
 // Thin controllers per contracts/settings.openapi.yaml. familyId + parentId come
@@ -19,6 +20,20 @@ export async function updateAccount(
   try {
     const { familyId, id } = req.principal!;
     await service.updateAccount(familyId, id, req.body as AccountUpdateInput);
+    res.status(200).json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function changePassword(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { familyId, id } = req.principal!;
+    await service.changePassword(familyId, id, req.body as ChangePasswordInput);
     res.status(200).json({ ok: true });
   } catch (err) {
     next(err);

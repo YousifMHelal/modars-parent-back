@@ -136,6 +136,23 @@ export const REMINDER_CATALOG: readonly ReminderCatalogEntry[] = [
   },
 ];
 
+/** Resolve a catalog slug (e.g. "daily-study") to its catalog entry, or null if unknown. */
+export function reminderEntryForSlug(slug: string): ReminderCatalogEntry | null {
+  return REMINDER_CATALOG.find((e) => e.id === slug) ?? null;
+}
+
+/** The ReminderRecipient enum value for a catalog default-recipient label. */
+export function recipientEnumForLabel(label: ReminderRecipientLabel): ReminderRecipient {
+  switch (label) {
+    case "Child":
+      return "CHILD";
+    case "Parent":
+      return "PARENT";
+    case "Both":
+      return "BOTH";
+  }
+}
+
 /** A single family-level reminder entry as consumed by the Reminders screen. */
 export interface FamilyReminderEntry {
   id: string;
@@ -160,16 +177,29 @@ function recipientLabel(recipient: ReminderRecipient): ReminderRecipientLabel {
   }
 }
 
+/** A ReminderConfig row as consumed by the family-level rollup. `childId` is optional
+ * but, when supplied, makes the representative selection deterministic. */
+export type MergeableReminderRow = Pick<
+  ReminderConfig,
+  "type" | "enabled" | "recipient" | "settings"
+> &
+  Partial<Pick<ReminderConfig, "childId">>;
+
 /**
  * Rolls per-child ReminderConfig rows up to the family-level 9-entry list.
  * For each catalog type: enabled = OR across the family's children; recipient and
- * settings come from a representative row (first one found); types with no rows
- * still appear, using the catalog's default recipient and no settings.
+ * settings come from a representative row; types with no rows still appear, using
+ * the catalog's default recipient and no settings.
+ *
+ * The representative is chosen deterministically — the lowest `childId` for the type
+ * — so the displayed recipient/settings never change between reads just because the
+ * DB returned rows in a different order (the cause of the time/days appearing to
+ * change on reload/login). When `childId` is unavailable the input order is kept.
  */
 export function mergeFamilyReminderConfigs(
-  configs: Pick<ReminderConfig, "type" | "enabled" | "recipient" | "settings">[],
+  configs: MergeableReminderRow[],
 ): FamilyReminderEntry[] {
-  const byType = new Map<ReminderType, typeof configs>();
+  const byType = new Map<ReminderType, MergeableReminderRow[]>();
   for (const cfg of configs) {
     const list = byType.get(cfg.type);
     if (list) list.push(cfg);
@@ -179,7 +209,14 @@ export function mergeFamilyReminderConfigs(
   return REMINDER_CATALOG.map((entry) => {
     const rows = byType.get(entry.type) ?? [];
     const enabled = rows.some((r) => r.enabled);
-    const representative = rows[0];
+    // Deterministic representative: lowest childId when present.
+    const representative = rows.reduce<MergeableReminderRow | undefined>((best, row) => {
+      if (!best) return row;
+      if (row.childId != null && best.childId != null) {
+        return row.childId < best.childId ? row : best;
+      }
+      return best;
+    }, undefined);
 
     const recipient = representative
       ? recipientLabel(representative.recipient)

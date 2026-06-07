@@ -89,6 +89,14 @@ const configSchema = z
     PAYMENT_WEBHOOK_SECRET: z.string().optional(),
     // Per-extra-child overflow price in minor units (SAR 25 = 2500 halalas).
     OVERFLOW_PRICE_MINOR: z.coerce.number().int().positive().default(2500),
+    // Where the in-memory fake provider redirects after createCharge. Defaults to the
+    // frontend's onboarding success step so the local dev flow lands back in the app
+    // instead of the non-resolvable fake-provider.test placeholder. Activation still
+    // arrives via the webhook, not this redirect.
+    FAKE_CHECKOUT_REDIRECT_URL: z
+      .string()
+      .url()
+      .default("http://localhost:5173/parent/step-5"),
 
     // Phase 6 — Background jobs & notifications (plan.md, quickstart.md §1)
     // BullMQ worker concurrency per queue.
@@ -108,6 +116,9 @@ const configSchema = z
     PUSH_PROVIDER: z.enum(["stub", "fcm"]).default("stub"),
     FCM_PROJECT_ID: z.string().optional(),
     FCM_CREDENTIALS_JSON: z.string().optional(),
+
+    // Sign-in URL printed on the child login card so a parent knows where the child logs in.
+    LOGIN_CARD_SIGNIN_URL: z.string().url().default("http://localhost:5173/learn"),
 
     // Phase 8 — Compliance & hardening (data-model.md §E)
     // Family deletion retain window (days) before the purge sweep removes the family graph.
